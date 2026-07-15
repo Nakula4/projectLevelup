@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1075456429685",
+    "project_id": "leveling-1623e",
+    "storage_bucket": "leveling-1623e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1075456429685:android:d52dc6d26c8c2d0eb9723c",
+        "android_client_info": {
+          "package_name": "com.example.levelup"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAgiZG6V0aAFsjy84riXmkUVSjI93jZ3dU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1075456429685:android:896b4b87055353abb9723c",
+        "android_client_info": {
+          "package_name": "com.leveling.appname"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAgiZG6V0aAFsjy84riXmkUVSjI93jZ3dU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
