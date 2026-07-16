@@ -12,7 +12,20 @@
           "package_name": "com.example.levelup"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1075456429685-8d9klmpfraolo532odgk95nbt9vbha66.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.levelup",
+            "certificate_hash": "f29f2ea1578fc7b9299d05ea3c3fc5a3edc67602"
+          }
+        },
+        {
+          "client_id": "1075456429685-5fgl00loa2h3difr82ibugka44uvh9tc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAgiZG6V0aAFsjy84riXmkUVSjI93jZ3dU"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1075456429685-5fgl00loa2h3difr82ibugka44uvh9tc.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1075456429685-10p85nov2l05dqmcguptnlvgq46qi431.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.levelup"
+              }
+            }
+          ]
         }
       }
     },
@@ -31,7 +56,12 @@
           "package_name": "com.leveling.appname"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1075456429685-5fgl00loa2h3difr82ibugka44uvh9tc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAgiZG6V0aAFsjy84riXmkUVSjI93jZ3dU"
@@ -39,7 +69,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1075456429685-5fgl00loa2h3difr82ibugka44uvh9tc.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1075456429685-10p85nov2l05dqmcguptnlvgq46qi431.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.levelup"
+              }
+            }
+          ]
         }
       }
     }
