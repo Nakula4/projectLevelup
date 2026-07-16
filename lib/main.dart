@@ -1,41 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-import 'player_stats_screen.dart';
-import 'daily_quest_screen.dart';
 import "home_screen.dart";
 import 'local_data.dart';
 import 'welcome_system_screen.dart';
+import 'login_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp();
   await LocalData.init();
-  runApp(const LevelupApp());
+  runApp(const MyApp());
 }
 
-class LevelupApp extends StatelessWidget {
-  const LevelupApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
-@override
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Levelup System',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0D0D12),
-        primaryColor: Colors.blueAccent,
-        fontFamily: 'Roboto', 
+      title: 'LevelUp',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: StreamBuilder<User?>(
+        initialData: FirebaseAuth.instance.currentUser,
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          
+          // ➔ KONDISI: USER SUDAH LOGIN
+          if (snapshot.hasData) {
+            // Baca memori lokal: Apakah ini pertama kali user masuk?
+            // Jika tidak ada data (null), kita asumsikan 'true' (artinya user baru)
+            bool isNewUser = LocalData.getBool('is_new_user') ?? true;
+
+            if (isNewUser) {
+              return const WelcomeSystemScreen(); // Kamar khusus user baru
+            } else {
+              return const MainSystemScreen(); // Jalur cepat user lama langsung ke Home
+            }
+          }
+          
+          // JIKA BELUM LOGIN / SUDAH LOGOUT
+          return const LoginScreen();
+        },
       ),
-      // Ganti pintu masuk ke navigasi utama
       routes: {
-        // ➔ 2. GANTI DENGAN NAMA KELAS ASLI Halaman Utama ANDA
+        '/login': (context) => const LoginScreen(),
         '/main_layout': (context) => const MainSystemScreen(), 
       },
-      home: const WelcomeSystemScreen(),
     );
   }
 }

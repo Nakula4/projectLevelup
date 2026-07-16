@@ -1,11 +1,70 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'local_data.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class PlayerStatsScreen extends StatelessWidget {
   const PlayerStatsScreen({super.key});
 
-  // POP-UP DIALOG UNTUK EDIT NAMA & JOB (TITLE DIKUNCI, HANYA BISA DIUBAH OLEH SYSTEM)
+  // FUNGSI LOGOUT (MEMBERSIHKAN SESI GOOGLE & FIREBASE)
+  Future<void> _logout(BuildContext context) async {
+    final bool? confirmLogout = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF15151E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Colors.redAccent, width: 1),
+          ),
+          title: const Text(
+            'LOGOUT ALERT',
+            style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+          ),
+          content: const Text(
+            'Apakah Anda yakin ingin memutuskan sinkronisasi dan keluar dari sistem?',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('BATAL', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('LOGOUT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmLogout != true) return;
+
+    try {
+      await GoogleSignIn().signOut();
+      await FirebaseAuth.instance.signOut();
+
+      if (context.mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+      print("SYSTEM LOG: Player berhasil log out.");
+    } catch (e) {
+      print("LOG SYSTEM ERROR LOGOUT: $e");
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gagal logout. Periksa koneksi internet Anda.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+  
+  // POP-UP DIALOG UNTUK EDIT NAMA & JOB
   void _showEditProfileDialog(BuildContext context, DocumentSnapshot playerDoc) {
     var data = playerDoc.data() as Map<String, dynamic>;
     
@@ -148,50 +207,39 @@ class PlayerStatsScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance.collection('players').limit(1).snapshots(),
         builder: (context, snapshot) {
           
-          // ➔ HAPUS BARIS LOADING LAMA YANG INI: 
-          // if (snapshot.connectionState == ConnectionState.waiting) return CircularProgressIndicator();
-          
           Map<String, dynamic> data;
           DocumentSnapshot? playerDoc; 
 
-          // ==========================================================
-          // ➔ SISTEM HIBRIDA: CACHE OFFLINE + CLOUD SYNC
-          // ==========================================================
           if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-            // Definisikan playerDoc dari server agar tidak error di baris 230
             playerDoc = snapshot.data!.docs.first;
             data = playerDoc.data() as Map<String, dynamic>;
-            
-            // Simpan data terbaru ke memori HP secara senyap
             LocalData.savePlayerData(data); 
           } else {
             data = LocalData.getPlayerData(); 
           }
-          // ==========================================================
 
           String name = (data['name'] ?? 'WICAKSONO').toString().toUpperCase();
           String job = (data['job'] ?? 'NOVICE').toString().toUpperCase();
           
           int level = data['level'] ?? 1;
           int currentExp = data['currentExp'] ?? 0;
+          
+          // ➔ DATA GOLD DITARIK DI SINI
+          int gold = data['gold'] ?? 0;
+          
           int str = data['str'] ?? 10;
           int vit = data['vit'] ?? 10;
           int agi = data['agi'] ?? 10;
           int intelligence = data['int'] ?? 10;
 
-          // ==========================================================
-          // ➔ MESIN LOGIKA TITLE (Dievaluasi otomatis saat layar dimuat)
-          // ==========================================================
           String title = 'THE PLAYER';
           String highestStat = 'str';
           int maxVal = str;
           
-          // Cari stat tertinggi
           if (vit > maxVal) { maxVal = vit; highestStat = 'vit'; }
           if (agi > maxVal) { maxVal = agi; highestStat = 'agi'; }
           if (intelligence > maxVal) { maxVal = intelligence; highestStat = 'int'; }
 
-          // Tentukan Title berdasarkan rentang Level
           if (level >= 50) {
             title = highestStat == 'str' ? 'GOD OF WAR' : highestStat == 'vit' ? 'TITAN' : highestStat == 'agi' ? 'SHADOW MONARCH' : 'OMNISCIENT';
           } else if (level >= 40) {
@@ -203,7 +251,6 @@ class PlayerStatsScreen extends StatelessWidget {
           } else if (level >= 10) {
             title = highestStat == 'str' ? 'APPRENTICE BRAWLER' : highestStat == 'vit' ? 'IRON SKIN' : highestStat == 'agi' ? 'SWIFT RUNNER' : 'NOVICE SCHOLAR';
           }
-          // ==========================================================
 
           int maxExp = level * 100;
           double progress = maxExp > 0 ? currentExp / maxExp : 0.0;
@@ -227,43 +274,47 @@ class PlayerStatsScreen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          InkWell(
-                            // ➔ UBAH BAGIAN onTap MENJADI SEPERTI INI:
-                            onTap: () {
-                              if (playerDoc != null) {
-                                // Jika online, jalankan edit profil secara normal (tambahkan tanda ! agar aman)
-                                _showEditProfileDialog(context, playerDoc!);
-                              } else {
-                                // Jika offline, beri peringatan dari System
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    backgroundColor: Colors.redAccent,
-                                    content: Text(
-                                      'SYSTEM OFFLINE: Tidak dapat mengubah data saat tidak ada koneksi.',
-                                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () {
+                                if (playerDoc != null) {
+                                  _showEditProfileDialog(context, playerDoc);
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      backgroundColor: Colors.redAccent,
+                                      content: Text(
+                                        'SYSTEM OFFLINE: Tidak dapat mengubah data saat tidak ada koneksi.',
+                                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                      ),
+                                      duration: Duration(seconds: 2),
                                     ),
-                                    duration: Duration(seconds: 2),
+                                  );
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(4),
+                              child: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      'NAME: $name', 
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.0)
+                                    ),
                                   ),
-                                );
-                              }
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('NAME: $name', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.0)),
-                                const SizedBox(width: 8),
-                                const Icon(Icons.edit, size: 16, color: Colors.blueAccent),
-                              ],
+                                  const SizedBox(width: 8),
+                                  const Icon(Icons.edit, size: 16, color: Colors.blueAccent),
+                                ],
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 10),
                           Text('LV. $level', style: const TextStyle(color: Colors.blueAccent, fontSize: 18, fontWeight: FontWeight.w900)),
                         ],
                       ),
                       const Divider(color: Colors.white12, height: 20),
                       Text('JOB: $job', style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
                       const SizedBox(height: 6),
-                      // ➔ Title akan dicetak otomatis dari mesin di atas
                       Text('TITLE: [$title]', style: TextStyle(color: Colors.cyanAccent.shade100, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
                       
                       const SizedBox(height: 24),
@@ -284,6 +335,32 @@ class PlayerStatsScreen extends StatelessWidget {
                           minHeight: 8,
                         ),
                       ),
+                      const SizedBox(height: 20),
+                      
+                      // ➔ INDIKATOR KOTAK GOLD BARU (Gaya Wallet/Currency RPG)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0D0D12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.withAlpha(50)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.monetization_on, color: Colors.amber, size: 18),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'GOLD', 
+                              style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.0)
+                            ),
+                            const Spacer(),
+                            Text(
+                              '$gold', 
+                              style: const TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.w900)
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -298,6 +375,38 @@ class PlayerStatsScreen extends StatelessWidget {
                 _buildStatRow('VITALITY (VIT)', vit, Icons.favorite),
                 _buildStatRow('AGILITY (AGI)', agi, Icons.directions_run),
                 _buildStatRow('INTELLIGENCE (INT)', intelligence, Icons.psychology),
+                
+                const SizedBox(height: 48),
+
+                // --- TOMBOL LOGOUT ---
+                InkWell(
+                  onTap: () => _logout(context),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1215), 
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.redAccent.withAlpha(76), width: 1.5),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.logout, color: Colors.redAccent, size: 20),
+                        SizedBox(width: 10),
+                        Text(
+                          'DISCONNECT FROM SYSTEM',
+                          style: TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           );

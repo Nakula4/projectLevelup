@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'penalty_screen.dart';
 import 'emergency_quest_screen.dart';
 import 'shop_screen.dart';
+import 'dart:async';
 
 class MainSystemScreen extends StatefulWidget {
   const MainSystemScreen({super.key});
@@ -15,6 +16,11 @@ class MainSystemScreen extends StatefulWidget {
 
 class _MainSystemScreenState extends State<MainSystemScreen> {
   int _selectedIndex = 0;
+  
+  Timer? _systemClock; 
+  
+  // ➔ PENGUNCIAN DATABASE LANGSUNG (Tanpa 'late', kebal dari Error Hot Reload)
+  final Stream<QuerySnapshot> _playerStream = FirebaseFirestore.instance.collection('players').limit(1).snapshots();
 
   final List<Widget> _screens = [
     const HomeDashboardView(),
@@ -22,6 +28,23 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
     const ShopScreen(),
     const PlayerStatsScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Radar berdetak setiap 10 detik untuk memastikan UI mengecek jam nyata
+    _systemClock = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) {
+        setState(() {}); 
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _systemClock?.cancel();
+    super.dispose();
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -31,18 +54,20 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ➔ BUNGKUS SELURUH APLIKASI DENGAN STREAM DATABASE
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('players').limit(1).snapshots(),
+      // ➔ MENGGUNAKAN SALURAN YANG SUDAH DIKUNCI (Anti-Kedip)
+      stream: _playerStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(backgroundColor: Color(0xFF0D0D12), body: Center(child: CircularProgressIndicator(color: Colors.blueAccent)));
+          return const Scaffold(
+            backgroundColor: Color(0xFF0D0D12), 
+            body: Center(child: CircularProgressIndicator(color: Colors.blueAccent))
+          );
         }
 
         String lastPenaltyDate = '';
         String lastEmergencyDate = '';
         
-        // Dapatkan tanggal hari ini (Format: YYYY-MM-DD)
         String todayStr = DateTime.now().toIso8601String().split('T')[0]; 
         int currentHour = DateTime.now().hour;
 
@@ -52,17 +77,20 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
           lastEmergencyDate = data['lastEmergencyDate'] ?? '';
         }
 
-        // ➔ CEK GERBANG 1: EMERGENCY QUEST (Jam 13 & Belum Dikerjakan Hari Ini)
+        // CEK GERBANG 1: EMERGENCY QUEST (Jam 13 & Belum Dikerjakan Hari Ini)
         if (currentHour == 13 && lastEmergencyDate != todayStr) {
           return const EmergencyQuestScreen();
         }
 
-        // ➔ CEK GERBANG 2: PENALTY ZONE (Jam 19+ & Belum Dikerjakan Hari Ini)
-        if (currentHour >= 19 && lastPenaltyDate != todayStr) {
+        // ====================================================================
+        // ➔ CEK GERBANG 2: PENALTY ZONE (MODE TESTING AKTIF - ANGKA 0)
+        // ====================================================================
+        // JANGAN LUPA: Kembalikan angka 0 ini menjadi 19 jika aplikasi sudah rilis!
+        if (currentHour >= 06 && lastPenaltyDate != todayStr) {
           return const PenaltyScreen();
         }
 
-        // ➔ JIKA AMAN, TAMPILKAN MENU NORMAL
+        // JIKA AMAN, TAMPILKAN MENU NORMAL
         return Scaffold(
           backgroundColor: const Color(0xFF0D0D12),
           body: _screens[_selectedIndex],
@@ -87,28 +115,53 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
 }
 
 // ============================================================================
-// ISI DARI LAYAR BERANDA (HOME DASHBOARD)
+// ISI DARI LAYAR BERANDA (DIUBAH KE STATEFUL AGAR ANTI KEDIP)
 // ============================================================================
-class HomeDashboardView extends StatelessWidget {
+// ============================================================================
+// ISI DARI LAYAR BERANDA
+// ============================================================================
+class HomeDashboardView extends StatefulWidget {
   const HomeDashboardView({super.key});
+
+  @override
+  State<HomeDashboardView> createState() => _HomeDashboardViewState();
+}
+
+class _HomeDashboardViewState extends State<HomeDashboardView> {
+  final Stream<QuerySnapshot> _homePlayerStream = FirebaseFirestore.instance.collection('players').limit(1).snapshots();
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('players').limit(1).snapshots(),
+        stream: _homePlayerStream,
         builder: (context, snapshot) {
           
           String playerName = 'WICAKSONO'; 
-          Map<String, dynamic> weeklyLog = {}; // ➔ Laci penampung data kalender
+          Map<String, dynamic> weeklyLog = {}; 
           int playerGold = 0;
+
+          // ➔ 1. LOGIKA: Siapkan variabel untuk membaca tanggal selesai penalti
+          String lastPenaltyDate = '';
+          String todayStr = DateTime.now().toIso8601String().split('T')[0];
 
           if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
             var data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
             playerName = (data['name'] ?? playerName).toString().toUpperCase();
             weeklyLog = data['weeklyLog'] ?? {}; 
-            playerGold = data['gold'] ?? 0; // ➔ Ekstrak Gold dari Firestore
+            playerGold = data['gold'] ?? 0; 
+            
+            // Ekstrak data dari firebase
+            lastPenaltyDate = data['lastPenaltyDate'] ?? '';
           }
+
+          // ➔ 2. LOGIKA: Cocokkan tanggal di database dengan hari ini
+          bool isSafeToday = (lastPenaltyDate == todayStr);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
@@ -119,43 +172,56 @@ class HomeDashboardView extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('WELCOME BACK,', style: TextStyle(color: Colors.white54, fontSize: 14, letterSpacing: 1.5)),
-                        const SizedBox(height: 4),
-                        Text(
-                          'PLAYER $playerName',
-                          style: TextStyle(
-                            color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1.5,
-                            shadows: [Shadow(color: Colors.blueAccent.withOpacity(0.5), blurRadius: 10)],
-                          ),
-                        ),
-                        const SizedBox(height: 8), // ➔ Tambahkan spasi
-                        // ➔ TAMBAHKAN INDIKATOR GOLD INI
-                        Row( 
-                          children: [
-                            const Icon(Icons.monetization_on, color: Colors.amber, size: 18),
-                            const SizedBox(width: 6),
-                            Text(
-                              '$playerGold G',
-                              style: const TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.bold),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('WELCOME BACK,', style: TextStyle(color: Colors.white54, fontSize: 14, letterSpacing: 1.5)),
+                          const SizedBox(height: 4),
+                          Text(
+                            'PLAYER $playerName',
+                            overflow: TextOverflow.ellipsis, 
+                            style: TextStyle(
+                              color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1.5,
+                              shadows: [Shadow(color: Colors.blueAccent.withOpacity(0.5), blurRadius: 10)],
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                          const SizedBox(height: 8), 
+                          Row( 
+                            children: [
+                              const Icon(Icons.monetization_on, color: Colors.amber, size: 18),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  '$playerGold G',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                      backgroundImage: const AssetImage('assets/profile.png'),
-                      child: Container(decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.blueAccent.withOpacity(0.5), width: 2))),
+                    
+                    const SizedBox(width: 16),
+                    
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.blueAccent.withOpacity(0.5), width: 2),
+                      ),
+                      child: CircleAvatar(
+                        radius: 22, 
+                        backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                        backgroundImage: const AssetImage('assets/profile.png'),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 40),
 
-                // --- SYSTEM ALERT CARD ---
+                // --- SYSTEM ALERT CARD (Struktur tetap sama tidak dirubah) ---
                 const Text('ACTIVE NOTIFICATION', style: TextStyle(color: Colors.blueAccent, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2.0)),
                 const SizedBox(height: 12),
                 Container(
@@ -183,10 +249,8 @@ class HomeDashboardView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 40),
-                
-                
 
-                // --- PROGRESS TRACKER (SEKARANG DINAMIS) ---
+                // --- PROGRESS TRACKER ---
                 const Text('WEEKLY LOG', style: TextStyle(color: Colors.blueAccent, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2.0)),
                 const SizedBox(height: 12),
           
@@ -200,7 +264,6 @@ class HomeDashboardView extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Logika membaca hari: 1=Senin, 2=Selasa, dst. Jika nilainya 'true', bulatan akan menyala.
                       _buildDayNode('M', weeklyLog['1'] == true),
                       _buildDayNode('T', weeklyLog['2'] == true),
                       _buildDayNode('W', weeklyLog['3'] == true),
@@ -210,20 +273,18 @@ class HomeDashboardView extends StatelessWidget {
                       _buildDayNode('S', weeklyLog['7'] == true),
                     ],
                   ),
-                  
                 ),
-                const SizedBox(height: 40), // pemanggilan timer sebelum terkena pinalty
-                const PenaltyCountdownTimer(),
+                const SizedBox(height: 40), 
+                
+                // ➔ 3. LOGIKA: Kirimkan status aman ke Timer
+                PenaltyCountdownTimer(isSafeToday: isSafeToday),
               ],
             ),
           );
         },
       ),
     );
-    
   }
-  
-  
 
   Widget _buildDayNode(String day, bool isCompleted) {
     return Column(
@@ -246,12 +307,15 @@ class HomeDashboardView extends StatelessWidget {
   }
 }
 
-
 // ============================================================================
-// WIDGET TIMER MANDIRI (HANYA DITEMPEL, TIDAK MERUSAK UI LAIN)
+// WIDGET TIMER SINKRON
 // ============================================================================
 class PenaltyCountdownTimer extends StatefulWidget {
-  const PenaltyCountdownTimer({super.key});
+  // ➔ 4. LOGIKA: Menerima status aman
+  final bool isSafeToday;
+  
+  const PenaltyCountdownTimer({super.key, required this.isSafeToday});
+  
   @override
   State<PenaltyCountdownTimer> createState() => _PenaltyCountdownTimerState();
 }
@@ -277,12 +341,20 @@ class _PenaltyCountdownTimerState extends State<PenaltyCountdownTimer> {
     if (!_isRunning) return;
 
     final now = DateTime.now();
-    final targetTime = DateTime(now.year, now.month, now.day, 19, 0, 0); // Target jam 19
+    DateTime targetTime;
+
+    // ➔ 5. LOGIKA INTI: Shift +1 Hari jika sudah selesai (aman)
+    if (widget.isSafeToday) {
+      targetTime = DateTime(now.year, now.month, now.day + 1, 06, 0, 0); // Besok jam 19:00
+    } else {
+      targetTime = DateTime(now.year, now.month, now.day, 06, 0, 0); // Hari ini jam 19:00
+    }
+
     final difference = targetTime.difference(now);
 
     if (mounted) {
       setState(() {
-        if (difference.isNegative) {
+        if (difference.isNegative && !widget.isSafeToday) {
           _isDeadlinePassed = true;
           _timeRemaining = "00:00:00"; 
         } else {
@@ -300,6 +372,7 @@ class _PenaltyCountdownTimerState extends State<PenaltyCountdownTimer> {
 
   @override
   Widget build(BuildContext context) {
+    // Tampilan UI Timer persis seperti semula tanpa ada perubahan warna atau teks
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
@@ -350,4 +423,3 @@ class _PenaltyCountdownTimerState extends State<PenaltyCountdownTimer> {
     );
   }
 }
-

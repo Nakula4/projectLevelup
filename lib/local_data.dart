@@ -8,6 +8,18 @@ class LocalData {
     _prefs = await SharedPreferences.getInstance();
   }
 
+  // =================================================================
+  // ➔ TAMBAHAN BARU: FUNGSI MEMBACA DAN MENULIS STATUS USER (BOOLEAN)
+  // =================================================================
+  static Future<void> setBool(String key, bool value) async {
+    await _prefs.setBool(key, value);
+  }
+
+  static bool? getBool(String key) {
+    return _prefs.getBool(key);
+  }
+  // =================================================================
+
   // Menyimpan data terbaru ke HP (Berjalan senyap di background)
   static Future<void> savePlayerData(Map<String, dynamic> data) async {
     await _prefs.setString('name', data['name'] ?? 'WICAKSONO');
