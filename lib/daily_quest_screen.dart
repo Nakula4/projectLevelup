@@ -421,9 +421,14 @@ class DailyQuestScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'QUEST BOARD',
-          style: TextStyle(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2.0),
+        title: Text(
+          'DIALY QUEST',
+          style: TextStyle(
+            color: Colors.amber.shade400,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 3.0,
+            shadows: [Shadow(color: const Color.fromARGB(255, 39, 114, 253).withOpacity(0.5), blurRadius: 15.0)],
+          ),
         ),
         centerTitle: true,
       ),
