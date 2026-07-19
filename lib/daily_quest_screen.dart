@@ -2,9 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'workout_active_screen.dart'; // Pastikan import ini sesuai dengan nama file Anda
+import 'package:firebase_auth/firebase_auth.dart';
 
 class DailyQuestScreen extends StatelessWidget {
   const DailyQuestScreen({super.key});
+
+  // ============================================================================
+  // LOGIKA SISTEM: PENENTUAN RANK BERDASARKAN LEVEL
+  // ============================================================================
+  String _determinePlayerRank(int level) {
+    if (level < 10) return 'E-RANK';
+    if (level < 25) return 'D-RANK';
+    if (level < 50) return 'C-RANK';
+    if (level < 75) return 'B-RANK';
+    if (level < 100) return 'A-RANK';
+    return 'S-RANK'; // Level 100 ke atas
+  }
 
   // ============================================================================
   // FUNGSI TELEPORTASI URL (UNTUK YOUTUBE/TIKTOK)
@@ -401,28 +414,13 @@ class DailyQuestScreen extends StatelessWidget {
   // ============================================================================
   @override
   Widget build(BuildContext context) {
-    // Data Dummy Quest - Anda bisa menggantinya dengan mengambil dari Firestore jika diperlukan
-    final List<Map<String, dynamic>> dailyQuestData = [
-      {
-        'title': 'PREPARATION FOR A HUNTER',
-        'rank': 'E-RANK',
-        'rewardAttribute': 'str',
-        'baseExpReward': 20,
-        'exercises': [
-          {'name': 'PUSH UP', 'sets': 3, 'baseReps': 10, 'multiplier': 2, 'unit': 'Reps'},
-          {'name': 'SIT UP', 'sets': 3, 'baseReps': 10, 'multiplier': 2, 'unit': 'Reps'},
-          {'name': 'SQUAT', 'sets': 3, 'baseReps': 10, 'multiplier': 2, 'unit': 'Reps'},
-        ],
-      }
-    ];
-
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D12),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-          'DIALY QUEST',
+          'DAILY QUEST', // Typo DIALY -> DAILY diperbaiki
           style: TextStyle(
             color: Colors.amber.shade400,
             fontWeight: FontWeight.w900,
@@ -433,7 +431,12 @@ class DailyQuestScreen extends StatelessWidget {
         centerTitle: true,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('players').limit(1).snapshots(),
+        // ➔ TAHAP 1: BACA LEVEL PLAYER DARI FIRESTORE
+        stream: FirebaseFirestore.instance
+        .collection('players')
+        .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid) // ➔ Kunci Pembatas Dimensi!
+    .limit(1)
+    .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.blueAccent));
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text('NO SYSTEM DATA', style: TextStyle(color: Colors.white38)));
@@ -441,19 +444,19 @@ class DailyQuestScreen extends StatelessWidget {
           var data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
           int currentLevel = data['level'] ?? 1;
           
+          // ➔ 1. TENTUKAN RANK PEMAIN BERDASARKAN LEVEL SAAT INI
+          String currentPlayerRank = _determinePlayerRank(currentLevel);
+
           String todayStr = DateTime.now().weekday.toString();
           Map<String, dynamic> weeklyLog = data['weeklyLog'] ?? {};
           bool isTaskCompletedToday = weeklyLog[todayStr] == true;
           
-          // DETEKSI WAKTU (Jam 19:00 = 7 Malam)
           bool isPastDeadline = DateTime.now().hour >= 19;
 
-          // ➔ JIKA MELEWATI BATAS WAKTU DAN BELUM LATIHAN = PENALTI
           if (isPastDeadline && !isTaskCompletedToday) {
             return _buildPenaltyScreen(context, currentLevel); 
           }
 
-          // ➔ JIKA AMAN (Belum lewat waktu / Sudah latihan)
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: Column(
@@ -483,9 +486,38 @@ class DailyQuestScreen extends StatelessWidget {
                     ),
                   )
                 else
-                  // Render daftar kartu Quest 
-                  ...dailyQuestData.map((quest) => _buildQuestCard(context, quest, currentLevel)),
-                  
+                  // ➔ TAHAP 2: AMBIL QUEST DARI FIRESTORE BERDASARKAN RANK
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('quests')
+                        .where('rank', isEqualTo: currentPlayerRank) // Filter rank di sini
+                        .snapshots(),
+                    builder: (context, questSnapshot) {
+                      if (questSnapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator(color: Colors.blueAccent));
+                      }
+                      
+                      if (!questSnapshot.hasData || questSnapshot.data!.docs.isEmpty) {
+                        return Container(
+                          padding: const EdgeInsets.all(20),
+                          child: Center(
+                            child: Text(
+                              'NO QUESTS FOUND FOR $currentPlayerRank',
+                              style: const TextStyle(color: Colors.white38, fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                        );
+                      }
+
+                      // Tampilkan semua quest yang cocok dengan Rank player
+                      return Column(
+                        children: questSnapshot.data!.docs.map((doc) {
+                          var questData = doc.data() as Map<String, dynamic>;
+                          return _buildQuestCard(context, questData, currentLevel);
+                        }).toList(),
+                      );
+                    },
+                  ),
               ],
             ),
           );

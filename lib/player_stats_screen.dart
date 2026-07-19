@@ -209,7 +209,11 @@ class PlayerStatsScreen extends StatelessWidget {
         centerTitle: true,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('players').limit(1).snapshots(),
+        stream: FirebaseFirestore.instance
+        .collection('players')
+        .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+        .limit(1)
+        .snapshots(),
         builder: (context, snapshot) {
           
           Map<String, dynamic> data;
@@ -229,13 +233,20 @@ class PlayerStatsScreen extends StatelessWidget {
           int level = data['level'] ?? 1;
           int currentExp = data['currentExp'] ?? 0;
           
-          // ➔ DATA GOLD DITARIK DI SINI
           int gold = data['gold'] ?? 0;
           
           int str = data['str'] ?? 10;
           int vit = data['vit'] ?? 10;
           int agi = data['agi'] ?? 10;
           int intelligence = data['int'] ?? 10;
+
+          // ➔ LOGIKA EVOLUSI RANK OTOMATIS
+          String playerRank = 'E-RANK';
+          if (level >= 100) playerRank = 'S-RANK';
+          else if (level >= 75) playerRank = 'A-RANK';
+          else if (level >= 50) playerRank = 'B-RANK';
+          else if (level >= 25) playerRank = 'C-RANK';
+          else if (level >= 10) playerRank = 'D-RANK';
 
           String title = 'THE PLAYER';
           String highestStat = 'str';
@@ -321,6 +332,10 @@ class PlayerStatsScreen extends StatelessWidget {
                       Text('JOB: $job', style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
                       const SizedBox(height: 6),
                       Text('TITLE: [$title]', style: TextStyle(color: Colors.cyanAccent.shade100, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                      const SizedBox(height: 6),
+                      
+                      // ➔ PENAMBAHAN RANK DI SINI
+                      Text('RANK: $playerRank', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
                       
                       const SizedBox(height: 24),
                       Row(
@@ -342,7 +357,6 @@ class PlayerStatsScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 20),
                       
-                      // ➔ INDIKATOR KOTAK GOLD BARU (Gaya Wallet/Currency RPG)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(

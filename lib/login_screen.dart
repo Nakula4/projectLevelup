@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'local_data.dart'; // ➔ TAMBAHAN: Wajib untuk menyimpan memori is_new_user
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -80,26 +81,44 @@ class _LoginScreenState extends State<LoginScreen> {
         final playerDoc = await playerRef.get();
 
         if (!playerDoc.exists) {
-          // PLAYER BARU: Buat dokumen profil dengan stats awal
+          // ➔ PLAYER BARU: Set status lengkap dan tandai memori
           await playerRef.set({
             'uid': user.uid,
-            'name': user.displayName ?? 'Player Baru',
+            'name': (user.displayName ?? 'PLAYER BARU').toUpperCase(),
+            'job': 'NOVICE',
             'email': user.email,
             'photoUrl': user.photoURL ?? '',
             'level': 1,
-            'exp': 0,
+            'currentExp': 0,
             'gold': 0,
+            'str': 10,
+            'vit': 10,
+            'agi': 10,
+            'int': 10,
+            'rank': 'E-RANK',
+            'weeklyLog': {},
+            'lastPenaltyDate': '',
+            'lastEmergencyDate': '',
             'createdAt': FieldValue.serverTimestamp(),
           });
+          
+          await LocalData.setBool('is_new_user', true);
           print("SYSTEM LOG: Player Baru Terdaftar via Google di Firestore!");
+          
+          if (mounted) {
+            // Arahkan ke rute Welcome System Screen
+            Navigator.pushReplacementNamed(context, '/welcome');
+          }
         } else {
+          // ➔ PLAYER LAMA: Sinkronisasi aman dan langsung masuk
+          await LocalData.setBool('is_new_user', false);
           print("SYSTEM LOG: Selamat Datang Kembali, Player Lama!");
+          
+          if (mounted) {
+            Navigator.pushReplacementNamed(context, '/main_layout');
+          }
         }
       }
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/main_layout');
-        }
-
     } catch (e) {
       print("LOG SYSTEM ERROR GOOGLE: $e");
       _showSnackBar('Google Sign-In Gagal. Periksa koneksi internet Anda.', Colors.redAccent);
@@ -121,28 +140,40 @@ class _LoginScreenState extends State<LoginScreen> {
 
       User? user = userCredential.user;
 
-      // Pengecekan Firestore opsional untuk email manual jika ingin memastikan data doc ada
       if (user != null) {
         final playerRef = FirebaseFirestore.instance.collection('players').doc(user.uid);
         final playerDoc = await playerRef.get();
 
         if (!playerDoc.exists) {
-          // Jika mendaftar lewat tempat lain tapi doc belum terbuat
+          // ➔ PLAYER BARU (MANUAL)
           await playerRef.set({
             'uid': user.uid,
-            'name': user.email!.split('@')[0], // Mengambil nama depan email sebagai username awal
+            'name': user.email!.split('@')[0].toUpperCase(),
+            'job': 'NOVICE',
             'email': user.email,
             'photoUrl': '',
             'level': 1,
-            'exp': 0,
+            'currentExp': 0,
             'gold': 0,
+            'str': 10,
+            'vit': 10,
+            'agi': 10,
+            'int': 10,
+            'rank': 'E-RANK',
+            'weeklyLog': {},
+            'lastPenaltyDate': '',
+            'lastEmergencyDate': '',
             'createdAt': FieldValue.serverTimestamp(),
           });
+          
+          await LocalData.setBool('is_new_user', true);
+          if (mounted) Navigator.pushReplacementNamed(context, '/welcome');
+        } else {
+          // ➔ PLAYER LAMA (MANUAL)
+          await LocalData.setBool('is_new_user', false);
+          if (mounted) Navigator.pushReplacementNamed(context, '/main_layout');
         }
       }
-
-      if (mounted) Navigator.pushReplacementNamed(context, '/main_layout');
-
     } catch (e) {
       print("LOG SYSTEM ERROR EMAIL: $e");
       _showSnackBar('Login Gagal: Email atau Password salah.', Colors.redAccent);

@@ -6,6 +6,7 @@ import 'penalty_screen.dart';
 import 'emergency_quest_screen.dart';
 import 'shop_screen.dart';
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart'; // ➔ 1. TAMBAHAN IMPORT AUTH
 
 class MainSystemScreen extends StatefulWidget {
   const MainSystemScreen({super.key});
@@ -16,11 +17,14 @@ class MainSystemScreen extends StatefulWidget {
 
 class _MainSystemScreenState extends State<MainSystemScreen> {
   int _selectedIndex = 0;
-  
   Timer? _systemClock; 
   
-  // ➔ PENGUNCIAN DATABASE LANGSUNG (Tanpa 'late', kebal dari Error Hot Reload)
-  final Stream<QuerySnapshot> _playerStream = FirebaseFirestore.instance.collection('players').limit(1).snapshots();
+  // ➔ PENGUNCIAN DATABASE LANGSUNG
+  final Stream<QuerySnapshot> _playerStream = FirebaseFirestore.instance
+  .collection('players')
+  .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+  .limit(1)
+  .snapshots();
 
   final List<Widget> _screens = [
     const HomeDashboardView(),
@@ -32,7 +36,6 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
   @override
   void initState() {
     super.initState();
-    // Radar berdetak setiap 10 detik untuk memastikan UI mengecek jam nyata
     _systemClock = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted) {
         setState(() {}); 
@@ -55,7 +58,6 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      // ➔ MENGGUNAKAN SALURAN YANG SUDAH DIKUNCI (Anti-Kedip)
       stream: _playerStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -65,32 +67,24 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
           );
         }
 
-        String lastPenaltyDate = '';
         String lastEmergencyDate = '';
-        
         String todayStr = DateTime.now().toIso8601String().split('T')[0]; 
         int currentHour = DateTime.now().hour;
 
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
           var data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
-          lastPenaltyDate = data['lastPenaltyDate'] ?? '';
           lastEmergencyDate = data['lastEmergencyDate'] ?? '';
         }
 
-        // CEK GERBANG 1: EMERGENCY QUEST (Jam 13 & Belum Dikerjakan Hari Ini)
+        // CEK GERBANG 1: EMERGENCY QUEST (Tetap memblokir karena ini darurat mendadak)
         if (currentHour == 13 && lastEmergencyDate != todayStr) {
           return const EmergencyQuestScreen();
         }
 
-        // ====================================================================
-        // ➔ CEK GERBANG 2: PENALTY ZONE (MODE TESTING AKTIF - ANGKA 0)
-        // ====================================================================
-        // JANGAN LUPA: Kembalikan angka 0 ini menjadi 19 jika aplikasi sudah rilis!
-        if (currentHour >= 06 && lastPenaltyDate != todayStr) {
-          return const PenaltyScreen();
-        }
+        // ➔ PERUBAHAN KRUSIAL: Pemblokiran Penalty Zone dihapus dari sini!
+        // Sistem sekarang akan selalu menampilkan Bottom Navigation Bar,
+        // sehingga Player BISA membuka tab Daily Quest kapan pun.
 
-        // JIKA AMAN, TAMPILKAN MENU NORMAL
         return Scaffold(
           backgroundColor: const Color(0xFF0D0D12),
           body: _screens[_selectedIndex],
@@ -115,9 +109,6 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
 }
 
 // ============================================================================
-// ISI DARI LAYAR BERANDA (DIUBAH KE STATEFUL AGAR ANTI KEDIP)
-// ============================================================================
-// ============================================================================
 // ISI DARI LAYAR BERANDA
 // ============================================================================
 class HomeDashboardView extends StatefulWidget {
@@ -128,12 +119,11 @@ class HomeDashboardView extends StatefulWidget {
 }
 
 class _HomeDashboardViewState extends State<HomeDashboardView> {
-  final Stream<QuerySnapshot> _homePlayerStream = FirebaseFirestore.instance.collection('players').limit(1).snapshots();
-
-  @override
-  void initState() {
-    super.initState();
-  }
+  final Stream<QuerySnapshot> _homePlayerStream = FirebaseFirestore.instance
+      .collection('players')
+      .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+      .limit(1)
+      .snapshots();
 
   @override
   Widget build(BuildContext context) {
@@ -145,23 +135,24 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
           String playerName = 'WICAKSONO'; 
           Map<String, dynamic> weeklyLog = {}; 
           int playerGold = 0;
+          String lastPenaltyDate = ''; // ➔ Tambahan variabel
 
-          // ➔ 1. LOGIKA: Siapkan variabel untuk membaca tanggal selesai penalti
-          String lastPenaltyDate = '';
+          bool isQuestCompletedToday = false;
+          int todayWeekday = DateTime.now().weekday; 
           String todayStr = DateTime.now().toIso8601String().split('T')[0];
+          int currentHour = DateTime.now().hour;
 
           if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
             var data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
             playerName = (data['name'] ?? playerName).toString().toUpperCase();
             weeklyLog = data['weeklyLog'] ?? {}; 
             playerGold = data['gold'] ?? 0; 
-            
-            // Ekstrak data dari firebase
             lastPenaltyDate = data['lastPenaltyDate'] ?? '';
+            isQuestCompletedToday = weeklyLog[todayWeekday.toString()] == true;
           }
 
-          // ➔ 2. LOGIKA: Cocokkan tanggal di database dengan hari ini
-          bool isSafeToday = (lastPenaltyDate == todayStr);
+          // ➔ CEK STATUS PENALTY DI SINI
+          bool isPenaltyActive = (currentHour >= 06 && !isQuestCompletedToday && lastPenaltyDate != todayStr);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
@@ -203,9 +194,7 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                         ],
                       ),
                     ),
-                    
                     const SizedBox(width: 16),
-                    
                     Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
@@ -221,33 +210,87 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                 ),
                 const SizedBox(height: 40),
 
-                // --- SYSTEM ALERT CARD (Struktur tetap sama tidak dirubah) ---
+                // --- SYSTEM ALERT CARD (DIBUAT DINAMIS) ---
                 const Text('ACTIVE NOTIFICATION', style: TextStyle(color: Colors.blueAccent, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2.0)),
                 const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF15151E),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.redAccent.withOpacity(0.5), width: 1.5),
-                    boxShadow: [BoxShadow(color: Colors.redAccent.withOpacity(0.1), blurRadius: 15, spreadRadius: 2)],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 24),
-                          SizedBox(width: 10),
-                          Text('UNCOMPLETED QUEST', style: TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                
+                // ➔ LOGIKA TAMPILAN KARTU NOTIFIKASI
+                if (isPenaltyActive)
+                  // KARTU MERAH: GERBANG MENUJU PENALTY ZONE
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const PenaltyScreen()));
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A0808), // Merah darah pekat
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.redAccent, width: 2),
+                        boxShadow: [BoxShadow(color: Colors.redAccent.withOpacity(0.3), blurRadius: 20, spreadRadius: 2)],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.dangerous, color: Colors.redAccent, size: 24),
+                              SizedBox(width: 10),
+                              Text('ENTER PENALTY ZONE', style: TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Text('Waktu telah habis. Sentuh kartu ini untuk memasuki Penalty Zone dan menjalani eksekusi fisik.', style: TextStyle(color: Colors.white, fontSize: 14, height: 1.5, fontWeight: FontWeight.bold)),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      const Text('Daily Quest belum diselesaikan. Harap segera berlatih untuk menghindari penalti sistem.', style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5)),
-                    ],
+                    ),
+                  )
+                else if (!isQuestCompletedToday)
+                  // KARTU KUNING: PERINGATAN QUEST BELUM SELESAI (KODE LAMA ANDA)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF15151E),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.5), width: 1.5),
+                      boxShadow: [BoxShadow(color: Colors.redAccent.withOpacity(0.1), blurRadius: 15, spreadRadius: 2)],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: const [
+                            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 24),
+                            SizedBox(width: 10),
+                            Text('UNCOMPLETED QUEST', style: TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text('Daily Quest belum diselesaikan. Harap segera berlatih untuk menghindari penalti sistem.', style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5)),
+                      ],
+                    ),
+                  )
+                else
+                  // KARTU HIJAU: QUEST SELESAI (Opsional, bonus estetika)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF15151E),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.greenAccent.withOpacity(0.5), width: 1.5),
+                    ),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.check_circle_outline, color: Colors.greenAccent, size: 24),
+                        SizedBox(width: 10),
+                        Text('ALL QUESTS CLEARED', style: TextStyle(color: Colors.greenAccent, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                      ],
+                    ),
                   ),
-                ),
+
                 const SizedBox(height: 40),
 
                 // --- PROGRESS TRACKER ---
@@ -276,8 +319,7 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                 ),
                 const SizedBox(height: 40), 
                 
-                // ➔ 3. LOGIKA: Kirimkan status aman ke Timer
-                PenaltyCountdownTimer(isSafeToday: isSafeToday),
+                PenaltyCountdownTimer(isSafeToday: isQuestCompletedToday),
               ],
             ),
           );
@@ -311,7 +353,6 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
 // WIDGET TIMER SINKRON
 // ============================================================================
 class PenaltyCountdownTimer extends StatefulWidget {
-  // ➔ 4. LOGIKA: Menerima status aman
   final bool isSafeToday;
   
   const PenaltyCountdownTimer({super.key, required this.isSafeToday});
@@ -343,11 +384,10 @@ class _PenaltyCountdownTimerState extends State<PenaltyCountdownTimer> {
     final now = DateTime.now();
     DateTime targetTime;
 
-    // ➔ 5. LOGIKA INTI: Shift +1 Hari jika sudah selesai (aman)
     if (widget.isSafeToday) {
-      targetTime = DateTime(now.year, now.month, now.day + 1, 06, 0, 0); // Besok jam 19:00
+      targetTime = DateTime(now.year, now.month, now.day + 1, 06, 0, 0); 
     } else {
-      targetTime = DateTime(now.year, now.month, now.day, 06, 0, 0); // Hari ini jam 19:00
+      targetTime = DateTime(now.year, now.month, now.day, 06, 0, 0); 
     }
 
     final difference = targetTime.difference(now);
@@ -372,7 +412,6 @@ class _PenaltyCountdownTimerState extends State<PenaltyCountdownTimer> {
 
   @override
   Widget build(BuildContext context) {
-    // Tampilan UI Timer persis seperti semula tanpa ada perubahan warna atau teks
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
