@@ -20,7 +20,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'LevelUp',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: ThemeData(
+    scaffoldBackgroundColor: const Color(0xFF0D0D12), // Kunci warna latar belakang ke gelap
+    brightness: Brightness.dark,),
       home: StreamBuilder<User?>(
         initialData: FirebaseAuth.instance.currentUser,
         stream: FirebaseAuth.instance.authStateChanges(),

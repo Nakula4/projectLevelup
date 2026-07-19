@@ -2,6 +2,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalData {
   static late SharedPreferences _prefs;
+  // TAMBAHKAN FUNGSI INI UNTUK MERESET MEMORI LOKAL (LOGOUT)
+  static Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+  }
 
   // Dipanggil sekali saat aplikasi pertama kali menyala
   static Future<void> init() async {

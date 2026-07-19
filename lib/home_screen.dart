@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'player_stats_screen.dart';
 import 'daily_quest_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'penalty_screen.dart';
 import 'emergency_quest_screen.dart';
 import 'shop_screen.dart';
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart'; // ➔ 1. TAMBAHAN IMPORT AUTH
 
 class MainSystemScreen extends StatefulWidget {
   const MainSystemScreen({super.key});
@@ -18,13 +18,8 @@ class MainSystemScreen extends StatefulWidget {
 class _MainSystemScreenState extends State<MainSystemScreen> {
   int _selectedIndex = 0;
   Timer? _systemClock; 
-  
-  // ➔ PENGUNCIAN DATABASE LANGSUNG
-  final Stream<QuerySnapshot> _playerStream = FirebaseFirestore.instance
-  .collection('players')
-  .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-  .limit(1)
-  .snapshots();
+
+  late Stream<QuerySnapshot> _playerStream;
 
   final List<Widget> _screens = [
     const HomeDashboardView(),
@@ -36,6 +31,13 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
   @override
   void initState() {
     super.initState();
+
+    _playerStream = FirebaseFirestore.instance
+        .collection('players')
+        .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+        .limit(1)
+        .snapshots();
+
     _systemClock = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted) {
         setState(() {}); 
@@ -57,6 +59,7 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ➔ PERBAIKAN 1: Stream diletakkan di SINI agar selalu mereset saat berganti User UID
     return StreamBuilder<QuerySnapshot>(
       stream: _playerStream,
       builder: (context, snapshot) {
@@ -70,20 +73,24 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
         String lastEmergencyDate = '';
         String todayStr = DateTime.now().toIso8601String().split('T')[0]; 
         int currentHour = DateTime.now().hour;
+        bool isNewPlayerProtection = false;
 
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
           var data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
           lastEmergencyDate = data['lastEmergencyDate'] ?? '';
+          
+          // ➔ DETEKSI PEMULA: Jika EXP masih 0 dan log kosong, aktifkan pelindung!
+          int exp = data['currentExp'] ?? 0;
+          Map weeklyLog = data['weeklyLog'] ?? {};
+          if (exp == 0 && weeklyLog.isEmpty) {
+            isNewPlayerProtection = true;
+          }
         }
 
-        // CEK GERBANG 1: EMERGENCY QUEST (Tetap memblokir karena ini darurat mendadak)
-        if (currentHour == 13 && lastEmergencyDate != todayStr) {
+        // CEK GERBANG 1: EMERGENCY QUEST (Pemula kebal dari ini di hari pertama)
+        if (currentHour == 13 && lastEmergencyDate != todayStr && !isNewPlayerProtection) {
           return const EmergencyQuestScreen();
         }
-
-        // ➔ PERUBAHAN KRUSIAL: Pemblokiran Penalty Zone dihapus dari sini!
-        // Sistem sekarang akan selalu menampilkan Bottom Navigation Bar,
-        // sehingga Player BISA membuka tab Daily Quest kapan pun.
 
         return Scaffold(
           backgroundColor: const Color(0xFF0D0D12),
@@ -119,15 +126,23 @@ class HomeDashboardView extends StatefulWidget {
 }
 
 class _HomeDashboardViewState extends State<HomeDashboardView> {
-  final Stream<QuerySnapshot> _homePlayerStream = FirebaseFirestore.instance
-      .collection('players')
-      .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-      .limit(1)
-      .snapshots();
+  late Stream<QuerySnapshot> _homePlayerStream;
+
+  @override
+  void initState() {
+    super.initState();
+    // ➔ 2. Inisialisasi SEKALI SAJA di initState
+    _homePlayerStream = FirebaseFirestore.instance
+        .collection('players')
+        .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+        .limit(1)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
+      // ➔ PERBAIKAN 2: Sama seperti di atas, Stream dimasukkan langsung ke builder!
       child: StreamBuilder<QuerySnapshot>(
         stream: _homePlayerStream,
         builder: (context, snapshot) {
@@ -135,12 +150,13 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
           String playerName = 'WICAKSONO'; 
           Map<String, dynamic> weeklyLog = {}; 
           int playerGold = 0;
-          String lastPenaltyDate = ''; // ➔ Tambahan variabel
+          String lastPenaltyDate = ''; 
 
           bool isQuestCompletedToday = false;
           int todayWeekday = DateTime.now().weekday; 
           String todayStr = DateTime.now().toIso8601String().split('T')[0];
           int currentHour = DateTime.now().hour;
+          bool isNewPlayerProtection = false; // ➔ Variabel Pelindung
 
           if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
             var data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
@@ -149,10 +165,20 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
             playerGold = data['gold'] ?? 0; 
             lastPenaltyDate = data['lastPenaltyDate'] ?? '';
             isQuestCompletedToday = weeklyLog[todayWeekday.toString()] == true;
+            
+            // ➔ Aktifkan perlindungan jika ini akun fresh (EXP = 0)
+            int exp = data['currentExp'] ?? 0;
+            if (exp == 0 && weeklyLog.isEmpty) {
+              isNewPlayerProtection = true;
+            }
           }
 
-          // ➔ CEK STATUS PENALTY DI SINI
-          bool isPenaltyActive = (currentHour >= 06 && !isQuestCompletedToday && lastPenaltyDate != todayStr);
+          // ➔ LOGIKA STATUS AMAN BARU (Pemula di hari pertama otomatis "Aman")
+          bool hasServedPenaltyToday = (lastPenaltyDate == todayStr);
+          bool isSafeToday = isQuestCompletedToday || hasServedPenaltyToday || isNewPlayerProtection;
+
+          // ➔ PENALTY ACTIVE HANYA JIKA BELUM AMAN
+          bool isPenaltyActive = (currentHour >= 19 && !isSafeToday);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
@@ -210,13 +236,38 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                 ),
                 const SizedBox(height: 40),
 
-                // --- SYSTEM ALERT CARD (DIBUAT DINAMIS) ---
+                // --- SYSTEM ALERT CARD ---
                 const Text('ACTIVE NOTIFICATION', style: TextStyle(color: Colors.blueAccent, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2.0)),
                 const SizedBox(height: 12),
                 
-                // ➔ LOGIKA TAMPILAN KARTU NOTIFIKASI
-                if (isPenaltyActive)
-                  // KARTU MERAH: GERBANG MENUJU PENALTY ZONE
+                // TAMPILAN KARTU BERDASARKAN STATUS
+                if (isNewPlayerProtection)
+                  // KARTU BIRU: PERLINDUNGAN PEMULA
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF15151E),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.blueAccent.withOpacity(0.5), width: 1.5),
+                      boxShadow: [BoxShadow(color: Colors.blueAccent.withOpacity(0.1), blurRadius: 15, spreadRadius: 2)],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: const [
+                            Icon(Icons.shield, color: Colors.blueAccent, size: 24),
+                            SizedBox(width: 10),
+                            Text('BEGINNER PROTECTION', style: TextStyle(color: Colors.blueAccent, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        const Text('Sistem memberikan kelonggaran di hari pertama Anda. Penalti dinonaktifkan hari ini. Silakan mulai beradaptasi.', style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5)),
+                      ],
+                    ),
+                  )
+                else if (isPenaltyActive)
                   GestureDetector(
                     onTap: () {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => const PenaltyScreen()));
@@ -225,7 +276,7 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF2A0808), // Merah darah pekat
+                        color: const Color(0xFF2A0808), 
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.redAccent, width: 2),
                         boxShadow: [BoxShadow(color: Colors.redAccent.withOpacity(0.3), blurRadius: 20, spreadRadius: 2)],
@@ -246,8 +297,7 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                       ),
                     ),
                   )
-                else if (!isQuestCompletedToday)
-                  // KARTU KUNING: PERINGATAN QUEST BELUM SELESAI (KODE LAMA ANDA)
+                else if (!isQuestCompletedToday && !hasServedPenaltyToday)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
@@ -273,7 +323,6 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                     ),
                   )
                 else
-                  // KARTU HIJAU: QUEST SELESAI (Opsional, bonus estetika)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
@@ -319,7 +368,7 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                 ),
                 const SizedBox(height: 40), 
                 
-                PenaltyCountdownTimer(isSafeToday: isQuestCompletedToday),
+                PenaltyCountdownTimer(isSafeToday: isSafeToday),
               ],
             ),
           );
@@ -385,9 +434,9 @@ class _PenaltyCountdownTimerState extends State<PenaltyCountdownTimer> {
     DateTime targetTime;
 
     if (widget.isSafeToday) {
-      targetTime = DateTime(now.year, now.month, now.day + 1, 06, 0, 0); 
+      targetTime = DateTime(now.year, now.month, now.day + 1, 19, 0, 0); 
     } else {
-      targetTime = DateTime(now.year, now.month, now.day, 06, 0, 0); 
+      targetTime = DateTime(now.year, now.month, now.day, 19, 0, 0); 
     }
 
     final difference = targetTime.difference(now);

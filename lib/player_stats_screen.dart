@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'local_data.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'local_data.dart';
+import 'player_growth_screen.dart'; // ➔ Wajib di-import untuk navigasi Radar
 
 class PlayerStatsScreen extends StatelessWidget {
   const PlayerStatsScreen({super.key});
@@ -44,6 +45,8 @@ class PlayerStatsScreen extends StatelessWidget {
     if (confirmLogout != true) return;
 
     try {
+      // ➔ MEMBERSIHKAN MEMORI LOKAL AGAR SISTEM BENAR-BENAR AMNESIA SAAT LOGOUT
+      await LocalData.clear(); 
       await GoogleSignIn().signOut();
       await FirebaseAuth.instance.signOut();
 
@@ -209,11 +212,12 @@ class PlayerStatsScreen extends StatelessWidget {
         centerTitle: true,
       ),
       body: StreamBuilder<QuerySnapshot>(
+        // ➔ SUDAH DIAMANKAN DENGAN FILTER UID
         stream: FirebaseFirestore.instance
-        .collection('players')
-        .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-        .limit(1)
-        .snapshots(),
+            .collection('players')
+            .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+            .limit(1)
+            .snapshots(),
         builder: (context, snapshot) {
           
           Map<String, dynamic> data;
@@ -240,7 +244,7 @@ class PlayerStatsScreen extends StatelessWidget {
           int agi = data['agi'] ?? 10;
           int intelligence = data['int'] ?? 10;
 
-          // ➔ LOGIKA EVOLUSI RANK OTOMATIS
+          // LOGIKA EVOLUSI RANK OTOMATIS
           String playerRank = 'E-RANK';
           if (level >= 100) playerRank = 'S-RANK';
           else if (level >= 75) playerRank = 'A-RANK';
@@ -334,7 +338,6 @@ class PlayerStatsScreen extends StatelessWidget {
                       Text('TITLE: [$title]', style: TextStyle(color: Colors.cyanAccent.shade100, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
                       const SizedBox(height: 6),
                       
-                      // ➔ PENAMBAHAN RANK DI SINI
                       Text('RANK: $playerRank', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
                       
                       const SizedBox(height: 24),
@@ -396,6 +399,46 @@ class PlayerStatsScreen extends StatelessWidget {
                 _buildStatRow('INTELLIGENCE (INT)', intelligence, Icons.psychology),
                 
                 const SizedBox(height: 48),
+
+                // ➔ TOMBOL BARU: VIEW GROWTH RADAR DENGAN FADE TRANSITION
+                InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (context, animation, secondaryAnimation) => const PlayerGrowthScreen(),
+                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          );
+                        },
+                        transitionDuration: const Duration(milliseconds: 400), 
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.cyanAccent.withOpacity(0.1), 
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.cyanAccent, width: 1.5),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.radar, color: Colors.cyanAccent, size: 20),
+                        SizedBox(width: 10),
+                        Text(
+                          'VIEW GROWTH RADAR',
+                          style: TextStyle(color: Colors.cyanAccent, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 2.0),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
 
                 // --- TOMBOL LOGOUT ---
                 InkWell(
