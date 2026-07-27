@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'local_data.dart';
-import 'welcome_system_screen.dart';
+import 'sign_up_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,19 +37,16 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-
       if (googleUser == null) {
         setState(() => _isLoading = false);
         return;
       }
-
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithCredential(credential);
       User? user = userCredential.user;
@@ -86,7 +83,6 @@ class _LoginScreenState extends State<LoginScreen> {
           await LocalData.setBool('is_new_user', false);
           print("SYSTEM LOG: Selamat Datang Kembali, Player Lama!");
         }
-
         if (mounted) {
           bool isNew = LocalData.getBool('is_new_user') ?? true;
           if (isNew) {
@@ -118,7 +114,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _loginWithEmailPassword() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
     try {
       UserCredential userCredential = await FirebaseAuth.instance
@@ -126,7 +121,6 @@ class _LoginScreenState extends State<LoginScreen> {
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
           );
-
       User? user = userCredential.user;
 
       if (user != null) {
@@ -159,7 +153,6 @@ class _LoginScreenState extends State<LoginScreen> {
         } else {
           await LocalData.setBool('is_new_user', false);
         }
-
         if (mounted) {
           bool isNew = LocalData.getBool('is_new_user') ?? true;
           if (isNew) {
@@ -292,9 +285,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 color: Colors.grey,
                               ),
                               onPressed: () {
-                                setState(() {
-                                  _isPasswordVisible = !_isPasswordVisible;
-                                });
+                                setState(
+                                  () =>
+                                      _isPasswordVisible = !_isPasswordVisible,
+                                );
                               },
                             ),
                             filled: true,
@@ -393,6 +387,41 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             side: const BorderSide(
                               color: Colors.grey,
+                              width: 0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const SignUpScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.person_add_alt_1,
+                            size: 24,
+                            color: Color.fromARGB(255, 2, 112, 229),
+                          ),
+                          label: const Text(
+                            'Sign Up',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            backgroundColor: const Color(0xff1e1e1e),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            side: const BorderSide(
+                              color: Color.fromARGB(255, 2, 112, 229),
                               width: 0.5,
                             ),
                           ),
