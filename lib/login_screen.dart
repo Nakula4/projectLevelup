@@ -2,32 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'local_data.dart'; // ➔ TAMBAHAN: Wajib untuk menyimpan memori is_new_user
+import 'local_data.dart';
+import 'welcome_system_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
-  // ➔ 1. FUNGSI LOGIN DITARUH DI SINI (Di dalam class layar login)
-  Future<void> signInWithGoogle() async {
-    try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return; 
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // Ini yang akan memicu radar di main.dart secara otomatis!
-      await FirebaseAuth.instance.signInWithCredential(credential);
-
-      // (TIDAK ADA KODE NAVIGATOR Pindah Layar di sini)
-
-    } catch (e) {
-      print("SYSTEM ERROR: $e");
-    }
-  }
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -46,14 +26,12 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // FUNGSI BANTUAN UNTUK MUNCULKAN PESAN ERROR
   void _showSnackBar(String message, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
-  // 1. FUNGSI UTAMA: LOGIN DENGAN GOOGLE & PENDAFTARAN FIRESTORE
   Future<void> _loginWithGoogle() async {
     setState(() => _isLoading = true);
     try {
@@ -65,23 +43,24 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithCredential(credential);
       User? user = userCredential.user;
 
-      // LOGIKA DATABASE FIRESTORE (CEK PLAYER LAMA ATAU BARU)
       if (user != null) {
-        final playerRef = FirebaseFirestore.instance.collection('players').doc(user.uid);
+        final playerRef = FirebaseFirestore.instance
+            .collection('players')
+            .doc(user.uid);
         final playerDoc = await playerRef.get();
 
         if (!playerDoc.exists) {
-          // ➔ PLAYER BARU: Set status lengkap dan tandai memori
           await playerRef.set({
             'uid': user.uid,
             'name': (user.displayName ?? 'PLAYER BARU').toUpperCase(),
@@ -101,51 +80,62 @@ class _LoginScreenState extends State<LoginScreen> {
             'lastEmergencyDate': '',
             'createdAt': FieldValue.serverTimestamp(),
           });
-          
           await LocalData.setBool('is_new_user', true);
           print("SYSTEM LOG: Player Baru Terdaftar via Google di Firestore!");
-          
-          if (mounted) {
-            // Arahkan ke rute Welcome System Screen
-            Navigator.pushReplacementNamed(context, '/welcome');
-          }
         } else {
-          // ➔ PLAYER LAMA: Sinkronisasi aman dan langsung masuk
           await LocalData.setBool('is_new_user', false);
           print("SYSTEM LOG: Selamat Datang Kembali, Player Lama!");
-          
-          if (mounted) {
+        }
+
+        if (mounted) {
+          bool isNew = LocalData.getBool('is_new_user') ?? true;
+          if (isNew) {
+            Navigator.pushReplacementNamed(context, '/welcome');
+          } else {
             Navigator.pushReplacementNamed(context, '/main_layout');
           }
         }
       }
     } catch (e) {
       print("LOG SYSTEM ERROR GOOGLE: $e");
-      _showSnackBar('Google Sign-In Gagal. Periksa koneksi internet Anda.', Colors.redAccent);
+      String errorMessage =
+          'Google Sign-In Gagal. Periksa koneksi internet Anda.';
+      String errStr = e.toString();
+      if (errStr.contains('12500') || errStr.contains('A_104')) {
+        errorMessage =
+            'Google Sign-In Gagal (SHA-1 mismatch). Hubungi developer untuk menambahkan SHA-1 fingerprint ke Firebase Console.';
+      } else if (errStr.contains('network') || errStr.contains('Network')) {
+        errorMessage = 'Koneksi internet tidak stabil. Coba lagi.';
+      } else if (errStr.contains('canceled') || errStr.contains('CANCELLED')) {
+        setState(() => _isLoading = false);
+        return;
+      }
+      _showSnackBar(errorMessage, Colors.redAccent);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // 2. FUNGSI UTAMA: LOGIN DENGAN EMAIL & PASSWORD MANUAL
   Future<void> _loginWithEmailPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
     try {
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
 
       User? user = userCredential.user;
 
       if (user != null) {
-        final playerRef = FirebaseFirestore.instance.collection('players').doc(user.uid);
+        final playerRef = FirebaseFirestore.instance
+            .collection('players')
+            .doc(user.uid);
         final playerDoc = await playerRef.get();
 
         if (!playerDoc.exists) {
-          // ➔ PLAYER BARU (MANUAL)
           await playerRef.set({
             'uid': user.uid,
             'name': user.email!.split('@')[0].toUpperCase(),
@@ -165,18 +155,37 @@ class _LoginScreenState extends State<LoginScreen> {
             'lastEmergencyDate': '',
             'createdAt': FieldValue.serverTimestamp(),
           });
-          
           await LocalData.setBool('is_new_user', true);
-          if (mounted) Navigator.pushReplacementNamed(context, '/welcome');
         } else {
-          // ➔ PLAYER LAMA (MANUAL)
           await LocalData.setBool('is_new_user', false);
-          if (mounted) Navigator.pushReplacementNamed(context, '/main_layout');
+        }
+
+        if (mounted) {
+          bool isNew = LocalData.getBool('is_new_user') ?? true;
+          if (isNew) {
+            Navigator.pushReplacementNamed(context, '/welcome');
+          } else {
+            Navigator.pushReplacementNamed(context, '/main_layout');
+          }
         }
       }
     } catch (e) {
       print("LOG SYSTEM ERROR EMAIL: $e");
-      _showSnackBar('Login Gagal: Email atau Password salah.', Colors.redAccent);
+      String errorMessage = 'Login Gagal. Periksa email dan password Anda.';
+      String errStr = e.toString();
+      if (errStr.contains('wrong-password') ||
+          errStr.contains('WRONG_PASSWORD')) {
+        errorMessage = 'Password salah. Coba lagi.';
+      } else if (errStr.contains('user-not-found') ||
+          errStr.contains('USER_NOT_FOUND')) {
+        errorMessage = 'Email tidak terdaftar. Silakan daftar terlebih dahulu.';
+      } else if (errStr.contains('network') || errStr.contains('Network')) {
+        errorMessage = 'Koneksi internet tidak stabil. Coba lagi.';
+      } else if (errStr.contains('too-many-requests') ||
+          errStr.contains('TOO_MANY_REQUESTS')) {
+        errorMessage = 'Terlalu banyak percobaan. Coba lagi nanti.';
+      }
+      _showSnackBar(errorMessage, Colors.redAccent);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -185,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xff121212), // Tema Gelap Khas Gamer
+      backgroundColor: const Color(0xff121212),
       body: SafeArea(
         child: Center(
           child: _isLoading
@@ -198,7 +207,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // LOGO / JUDUL APLIKASI DENGAN EFEK NEON
                         const Center(
                           child: Text(
                             'LEVEL UP',
@@ -229,8 +237,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 50),
-
-                        // INPUT EMAIL
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
@@ -238,27 +244,35 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Email',
                             labelStyle: const TextStyle(color: Colors.grey),
-                            prefixIcon: const Icon(Icons.email, color: Colors.grey),
+                            prefixIcon: const Icon(
+                              Icons.email,
+                              color: Colors.grey,
+                            ),
                             filled: true,
                             fillColor: const Color(0xff1e1e1e),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.grey, width: 0.5),
+                              borderSide: const BorderSide(
+                                color: Colors.grey,
+                                width: 0.5,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.blueAccent),
+                              borderSide: const BorderSide(
+                                color: Colors.blueAccent,
+                              ),
                             ),
                           ),
                           validator: (value) {
-                            if (value == null || value.isEmpty) return 'Email tidak boleh kosong';
-                            if (!value.contains('@')) return 'Format email salah';
+                            if (value == null || value.isEmpty)
+                              return 'Email tidak boleh kosong';
+                            if (!value.contains('@'))
+                              return 'Format email salah';
                             return null;
                           },
                         ),
                         const SizedBox(height: 16),
-
-                        // INPUT PASSWORD
                         TextFormField(
                           controller: _passwordController,
                           obscureText: !_isPasswordVisible,
@@ -266,10 +280,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Password',
                             labelStyle: const TextStyle(color: Colors.grey),
-                            prefixIcon: const Icon(Icons.lock, color: Colors.grey),
+                            prefixIcon: const Icon(
+                              Icons.lock,
+                              color: Colors.grey,
+                            ),
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                                _isPasswordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                                 color: Colors.grey,
                               ),
                               onPressed: () {
@@ -282,22 +301,27 @@ class _LoginScreenState extends State<LoginScreen> {
                             fillColor: const Color(0xff1e1e1e),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.grey, width: 0.5),
+                              borderSide: const BorderSide(
+                                color: Colors.grey,
+                                width: 0.5,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.blueAccent),
+                              borderSide: const BorderSide(
+                                color: Colors.blueAccent,
+                              ),
                             ),
                           ),
                           validator: (value) {
-                            if (value == null || value.isEmpty) return 'Password tidak boleh kosong';
-                            if (value.length < 6) return 'Password minimal 6 karakter';
+                            if (value == null || value.isEmpty)
+                              return 'Password tidak boleh kosong';
+                            if (value.length < 6)
+                              return 'Password minimal 6 karakter';
                             return null;
                           },
                         ),
                         const SizedBox(height: 24),
-
-                        // TOMBOL LOGIN EMAIL PASSWORD MANUAL
                         ElevatedButton(
                           onPressed: _loginWithEmailPassword,
                           style: ElevatedButton.styleFrom(
@@ -309,25 +333,43 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           child: const Text(
                             'Login',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),
-
-                        // PEMBATAL / DIVIDER TEKS "OR"
                         Row(
                           children: [
-                            Expanded(child: Divider(color: Colors.grey[800], thickness: 1)),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              child: Text('OR', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                            Expanded(
+                              child: Divider(
+                                color: Colors.grey[800],
+                                thickness: 1,
+                              ),
                             ),
-                            Expanded(child: Divider(color: Colors.grey[800], thickness: 1)),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              child: Text(
+                                'OR',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Divider(
+                                color: Colors.grey[800],
+                                thickness: 1,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 20),
-
-                        // TOMBOL GOOGLE SIGN-IN (Bebas Crash 400 & COCOK DENGAN TEMA GELAP)
                         OutlinedButton.icon(
                           onPressed: _loginWithGoogle,
                           icon: const Icon(
@@ -349,7 +391,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            side: const BorderSide(color: Colors.grey, width: 0.5),
+                            side: const BorderSide(
+                              color: Colors.grey,
+                              width: 0.5,
+                            ),
                           ),
                         ),
                       ],

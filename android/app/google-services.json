@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "1075456429685-8d9klmpfraolo532odgk95nbt9vbha66.apps.googleusercontent.com",
+          "client_id": "1075456429685-cov0vpj6gmlvj7illd5l2emfoj5loucu.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.levelup",
-            "certificate_hash": "f29f2ea1578fc7b9299d05ea3c3fc5a3edc67602"
+            "certificate_hash": "96b97455844a4958ad8d9778f06bbf7a376d72ab"
           }
         },
         {

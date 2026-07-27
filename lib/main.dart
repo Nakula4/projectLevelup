@@ -5,10 +5,11 @@ import 'local_data.dart';
 import 'welcome_system_screen.dart';
 import 'login_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await LocalData.init();
   runApp(const MyApp());
 }
@@ -21,8 +22,11 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'LevelUp',
       theme: ThemeData(
-    scaffoldBackgroundColor: const Color(0xFF0D0D12), // Kunci warna latar belakang ke gelap
-    brightness: Brightness.dark,),
+        scaffoldBackgroundColor: const Color(
+          0xFF0D0D12,
+        ), // Kunci warna latar belakang ke gelap
+        brightness: Brightness.dark,
+      ),
       home: StreamBuilder<User?>(
         initialData: FirebaseAuth.instance.currentUser,
         stream: FirebaseAuth.instance.authStateChanges(),
@@ -32,27 +36,25 @@ class MyApp extends StatelessWidget {
               body: Center(child: CircularProgressIndicator()),
             );
           }
-          
-          // ➔ KONDISI: USER SUDAH LOGIN
+
+          // logika untuk user baru
           if (snapshot.hasData) {
-            // Baca memori lokal: Apakah ini pertama kali user masuk?
-            // Jika tidak ada data (null), kita asumsikan 'true' (artinya user baru)
             bool isNewUser = LocalData.getBool('is_new_user') ?? true;
 
             if (isNewUser) {
-              return const WelcomeSystemScreen(); // Kamar khusus user baru
+              return const WelcomeSystemScreen();
             } else {
-              return const MainSystemScreen(); // Jalur cepat user lama langsung ke Home
+              return const MainSystemScreen();
             }
           }
-          
-          // JIKA BELUM LOGIN / SUDAH LOGOUT
+
           return const LoginScreen();
         },
       ),
       routes: {
         '/login': (context) => const LoginScreen(),
-        '/main_layout': (context) => const MainSystemScreen(), 
+        '/main_layout': (context) => const MainSystemScreen(),
+        '/welcome': (context) => const WelcomeSystemScreen(),
       },
     );
   }
