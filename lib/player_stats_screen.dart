@@ -10,7 +10,6 @@ import 'package:image_picker/image_picker.dart';
 import 'local_data.dart';
 import 'player_growth_screen.dart';
 
-// 🛡️ PERUBAHAN KRUSIAL: Menjadi StatefulWidget agar tahan banting saat layar "ditidurkan" Android
 class PlayerStatsScreen extends StatefulWidget {
   const PlayerStatsScreen({super.key});
 
@@ -19,12 +18,13 @@ class PlayerStatsScreen extends StatefulWidget {
 }
 
 class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
-  // Fungsi Penyelamat Base64
   Uint8List _safeBase64Decode(String data) {
     try {
       String clean = data.split(',').last.replaceAll(RegExp(r'\s+'), '');
       int pad = clean.length % 4;
-      if (pad > 0) clean += '=' * (4 - pad);
+      if (pad > 0) {
+        clean += '=' * (4 - pad);
+      }
       return base64Decode(clean);
     } catch (e) {
       debugPrint("SYSTEM ERROR - BASE64 DECODE GAGAL: $e");
@@ -79,16 +79,22 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
       },
     );
 
-    if (confirmLogout != true) return;
+    if (confirmLogout != true) {
+      return;
+    }
+
     try {
       await LocalData.clear();
       await GoogleSignIn().signOut();
       await FirebaseAuth.instance.signOut();
-      if (mounted)
-        Navigator.of(
-          context,
-        ).pushNamedAndRemoveUntil('/login', (route) => false);
-    } catch (e) {}
+
+      if (!context.mounted) {
+        return; // Mencegah warning async context
+      }
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+    } catch (e) {
+      debugPrint("LOGOUT ERROR: $e"); // Mengatasi warning empty_catches
+    }
   }
 
   void _showAvatarViewer(String photoUrl, DocumentSnapshot playerDoc) {
@@ -124,7 +130,7 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                     border: Border.all(color: Colors.blueAccent, width: 4),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.blueAccent.withOpacity(0.3),
+                        color: Colors.blueAccent.withValues(alpha: 0.3),
                         blurRadius: 20,
                         spreadRadius: 2,
                       ),
@@ -192,8 +198,8 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                         ),
                       ),
                       onPressed: () {
-                        Navigator.pop(dialogContext); // Tutup Viewer
-                        _changeAvatar(playerDoc); // Panggil fungsi ubah
+                        Navigator.pop(dialogContext);
+                        _changeAvatar(playerDoc);
                       },
                     ),
                   ],
@@ -240,20 +246,24 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
       ),
     );
 
-    if (source == null) return;
+    if (source == null) {
+      return;
+    }
 
-    // 🚀 INI KUNCI EFISIENSI: Native Compression oleh Android OS
     final XFile? pickedFile = await picker.pickImage(
       source: source,
-      maxWidth: 400, // Otomatis dikecilkan agar Database aman
+      maxWidth: 400,
       maxHeight: 400,
-      imageQuality: 70, // Kompresi kilat tanpa lag
+      imageQuality: 70,
     );
 
-    if (pickedFile == null) return;
+    if (pickedFile == null) {
+      return;
+    }
 
-    // 🛡️ PENYELAMAT NYAWA: Karena kita pakai StatefulWidget, 'mounted' ini permanen!
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     showDialog(
       context: context,
@@ -335,7 +345,6 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
 
                           try {
                             Uint8List rawBytes = await pickedFile.readAsBytes();
-                            // Langsung ubah menjadi teks (Karena sudah dikompres sistem HP)
                             String finalPhotoUrl =
                                 "data:image/jpeg;base64,${base64Encode(rawBytes)}";
 
@@ -343,25 +352,35 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                               'photoUrl': finalPhotoUrl,
                             });
 
-                            if (mounted) {
-                              Navigator.pop(dialogContext); // Tutup Preview
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Avatar berhasil diperbarui!'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                            if (!dialogContext.mounted) {
+                              return; // Fix async context warning
                             }
+                            Navigator.pop(dialogContext); // Tutup Preview
+
+                            if (!context.mounted) {
+                              return; // Fix async context warning
+                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Avatar berhasil diperbarui!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
                           } catch (e) {
-                            if (mounted) {
-                              setDialogState(() => isUploading = false);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Sistem Menolak: $e'),
-                                  backgroundColor: Colors.redAccent,
-                                ),
-                              );
+                            if (!dialogContext.mounted) {
+                              return;
                             }
+                            setDialogState(() => isUploading = false);
+
+                            if (!context.mounted) {
+                              return;
+                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Sistem Menolak: $e'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
                           }
                         },
                   style: ElevatedButton.styleFrom(
@@ -399,7 +418,11 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
     );
     String selectedJob = data['job'] ?? 'NOVICE';
     List<String> jobList = ['NOVICE', 'FIGHTER', 'ASSASSIN', 'TANKER', 'MAGE'];
-    if (!jobList.contains(selectedJob)) jobList.add(selectedJob);
+
+    if (!jobList.contains(selectedJob)) {
+      jobList.add(selectedJob);
+    }
+
     bool isSaving = false;
 
     showDialog(
@@ -445,8 +468,8 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide(
-                        color: Colors.blueAccent.withAlpha(76),
-                      ),
+                        color: Colors.blueAccent.withValues(alpha: 0.3),
+                      ), // Fix withValues warning
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -474,7 +497,9 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF0D0D12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blueAccent.withAlpha(76)),
+                    border: Border.all(
+                      color: Colors.blueAccent.withValues(alpha: 0.3),
+                    ), // Fix withValues warning
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
@@ -498,8 +523,9 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                           )
                           .toList(),
                       onChanged: (newValue) {
-                        if (newValue != null)
+                        if (newValue != null) {
                           setDialogState(() => selectedJob = newValue);
+                        }
                       },
                     ),
                   ),
@@ -523,7 +549,10 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                           'name': nameController.text.trim().toUpperCase(),
                           'job': selectedJob,
                         });
-                        if (mounted) Navigator.pop(dialogContext);
+                        if (!dialogContext.mounted) {
+                          return; // Fix async warning
+                        }
+                        Navigator.pop(dialogContext);
                       },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blueAccent,
@@ -567,7 +596,12 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
             letterSpacing: 3.0,
             shadows: [
               Shadow(
-                color: const Color.fromARGB(255, 39, 114, 253).withOpacity(0.5),
+                color: const Color.fromARGB(
+                  255,
+                  39,
+                  114,
+                  253,
+                ).withValues(alpha: 0.5), // Fix withValues warning
                 blurRadius: 15.0,
               ),
             ],
@@ -576,17 +610,17 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
         centerTitle: true,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // 🛡️ Menggunakan nama 'streamContext' agar tidak bentrok dengan 'context' utama
         stream: FirebaseFirestore.instance
             .collection('players')
             .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
             .limit(1)
             .snapshots(),
         builder: (streamContext, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.blueAccent),
             );
+          }
 
           Map<String, dynamic> data;
           DocumentSnapshot? playerDoc;
@@ -613,21 +647,25 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
           int maxExp = level * 100;
           double progress = maxExp > 0 ? currentExp / maxExp : 0.0;
 
-          // (Logika Pangkat & Gelar Hunter Sama Seperti Sebelumnya...)
+          // Perhitungan Rank
           String playerRank = 'E-RANK';
-          if (level >= 100)
+          if (level >= 100) {
             playerRank = 'S-RANK';
-          else if (level >= 75)
+          } else if (level >= 75) {
             playerRank = 'A-RANK';
-          else if (level >= 50)
+          } else if (level >= 50) {
             playerRank = 'B-RANK';
-          else if (level >= 25)
+          } else if (level >= 25) {
             playerRank = 'C-RANK';
-          else if (level >= 10)
+          } else if (level >= 10) {
             playerRank = 'D-RANK';
+          }
+
+          // Perhitungan Title Berdasarkan Atribut Tertinggi
           String title = 'THE PLAYER';
           String highestStat = 'str';
           int maxVal = str;
+
           if (vit > maxVal) {
             maxVal = vit;
             highestStat = 'vit';
@@ -640,6 +678,7 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
             maxVal = intelligence;
             highestStat = 'int';
           }
+
           if (level >= 50) {
             title = highestStat == 'str'
                 ? 'GOD OF WAR'
@@ -692,7 +731,9 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF15151E),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blueAccent.withAlpha(76)),
+                    border: Border.all(
+                      color: Colors.blueAccent.withValues(alpha: 0.3),
+                    ), // Fix withValues warning
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -701,8 +742,9 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                         children: [
                           GestureDetector(
                             onTap: () {
-                              if (playerDoc != null)
+                              if (playerDoc != null) {
                                 _showAvatarViewer(photoUrl, playerDoc);
+                              }
                             },
                             child: Stack(
                               alignment: Alignment.bottomRight,
@@ -791,8 +833,9 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                                         color: Colors.blueAccent,
                                       ),
                                       onPressed: () {
-                                        if (playerDoc != null)
+                                        if (playerDoc != null) {
                                           _showEditProfileDialog(playerDoc);
+                                        }
                                       },
                                     ),
                                   ],
@@ -811,6 +854,8 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                         ],
                       ),
                       const Divider(color: Colors.white12, height: 24),
+
+                      // ➔ 1. MENGEMBALIKAN UI JOB, TITLE, DAN RANK YANG SEMPAT HILANG
                       Text(
                         'JOB: $job',
                         style: const TextStyle(
@@ -819,7 +864,28 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'TITLE: [$title]',
+                        style: TextStyle(
+                          color: Colors.cyanAccent.shade100,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'RANK: $playerRank',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
                       const SizedBox(height: 24),
+
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -851,6 +917,50 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                             Colors.blueAccent,
                           ),
                           minHeight: 8,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // ➔ 2. MENGEMBALIKAN UI GOLD HUNTER
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0D0D12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.monetization_on,
+                              color: Colors.amber,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'GOLD',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '$gold',
+                              style: const TextStyle(
+                                color: Colors.amber,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -895,7 +1005,7 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
-                      color: Colors.cyanAccent.withOpacity(0.1),
+                      color: Colors.cyanAccent.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.cyanAccent, width: 1.5),
                     ),
@@ -927,9 +1037,9 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                       color: const Color(0xFF1A1215),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: Colors.redAccent.withAlpha(76),
+                        color: Colors.redAccent.withValues(alpha: 0.3),
                         width: 1.5,
-                      ),
+                      ), // Fix withValues warning
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,

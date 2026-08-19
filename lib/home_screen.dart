@@ -42,7 +42,9 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
         .snapshots();
 
     _systemClock = Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     });
   }
 
@@ -53,19 +55,9 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
   }
 
   void _onItemTapped(int index) {
-    setState(() => _selectedIndex = index);
-  }
-
-  // Fungsi Pembaca Base64 (Untuk Avatar)
-  Uint8List _safeBase64Decode(String data) {
-    try {
-      String clean = data.split(',').last.replaceAll(RegExp(r'\s+'), '');
-      int pad = clean.length % 4;
-      if (pad > 0) clean += '=' * (4 - pad);
-      return base64Decode(clean);
-    } catch (e) {
-      return Uint8List(0);
-    }
+    setState(() {
+      _selectedIndex = index;
+    });
   }
 
   @override
@@ -90,9 +82,12 @@ class _MainSystemScreenState extends State<MainSystemScreen> {
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
           var data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
           lastEmergencyDate = data['lastEmergencyDate'] ?? '';
+
           int exp = data['currentExp'] ?? 0;
           Map weeklyLog = data['weeklyLog'] ?? {};
-          if (exp == 0 && weeklyLog.isEmpty) isNewPlayerProtection = true;
+          if (exp == 0 && weeklyLog.isEmpty) {
+            isNewPlayerProtection = true;
+          }
         }
 
         if (currentHour == 13 &&
@@ -163,13 +158,17 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
         .snapshots();
   }
 
+  // 🛡️ Fungsi Decoder Base64 yang digunakan aktif di beranda
   Uint8List _safeBase64Decode(String data) {
     try {
       String clean = data.split(',').last.replaceAll(RegExp(r'\s+'), '');
       int pad = clean.length % 4;
-      if (pad > 0) clean += '=' * (4 - pad);
+      if (pad > 0) {
+        clean += '=' * (4 - pad);
+      }
       return base64Decode(clean);
     } catch (e) {
+      debugPrint("SYSTEM ERROR - BASE64 DECODE GAGAL: $e");
       return Uint8List(0);
     }
   }
@@ -181,7 +180,7 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
         stream: _homePlayerStream,
         builder: (context, snapshot) {
           String playerName = 'WICAKSONO';
-          String photoUrl = ''; // 🛡️ Sinkronisasi Avatar
+          String photoUrl = '';
           Map<String, dynamic> weeklyLog = {};
           int playerGold = 0;
           String lastPenaltyDate = '';
@@ -192,7 +191,6 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
           int currentHour = DateTime.now().hour;
           bool isNewPlayerProtection = false;
 
-          // 🛡️ Variabel Counter Harian
           int completedCountToday = 0;
 
           if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
@@ -204,20 +202,20 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
             playerGold = data['gold'] ?? 0;
             lastPenaltyDate = data['lastPenaltyDate'] ?? '';
 
-            // 🛡️ Menghitung progres misi hari ini (Logika Counter Baru)
             if (weeklyLog[todayWeekday.toString()] != null) {
               if (weeklyLog[todayWeekday.toString()] is int) {
                 completedCountToday = weeklyLog[todayWeekday.toString()];
               } else if (weeklyLog[todayWeekday.toString()] == true) {
-                completedCountToday = 1; // Adaptasi data lama
+                completedCountToday = 1;
               }
             }
 
             int exp = data['currentExp'] ?? 0;
-            if (exp == 0 && weeklyLog.isEmpty) isNewPlayerProtection = true;
+            if (exp == 0 && weeklyLog.isEmpty) {
+              isNewPlayerProtection = true;
+            }
           }
 
-          // 🛡️ LOGIKA STATUS AMAN BARU: Aman jika sudah melakukan minimal 1 misi hari ini!
           bool hasServedPenaltyToday = (lastPenaltyDate == todayStr);
           bool isSafeToday =
               completedCountToday > 0 ||
@@ -257,10 +255,12 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                               letterSpacing: 1.5,
                               shadows: [
                                 Shadow(
-                                  color: Colors.blueAccent.withOpacity(0.5),
+                                  color: Colors.blueAccent.withValues(
+                                    alpha: 0.5,
+                                  ),
                                   blurRadius: 10,
                                 ),
-                              ],
+                              ], // Fix withValues
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -272,7 +272,9 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.blueAccent.withOpacity(0.2),
+                                  color: Colors.blueAccent.withValues(
+                                    alpha: 0.2,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(color: Colors.blueAccent),
                                 ),
@@ -309,22 +311,21 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // 🛡️ AVATAR SINKRONISASI
                     Container(
                       width: 50,
                       height: 50,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: Colors.blueAccent.withOpacity(0.8),
+                          color: Colors.blueAccent.withValues(alpha: 0.8),
                           width: 2,
-                        ),
+                        ), // Fix withValues
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.blueAccent.withOpacity(0.3),
+                            color: Colors.blueAccent.withValues(alpha: 0.3),
                             blurRadius: 10,
                           ),
-                        ],
+                        ], // Fix withValues
                       ),
                       child: ClipOval(
                         child:
@@ -377,17 +378,17 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                       color: const Color(0xFF15151E),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.blueAccent.withOpacity(0.5),
+                        color: Colors.blueAccent.withValues(alpha: 0.5),
                         width: 1.5,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.blueAccent.withOpacity(0.1),
+                          color: Colors.blueAccent.withValues(alpha: 0.1),
                           blurRadius: 15,
                           spreadRadius: 2,
                         ),
                       ],
-                    ),
+                    ), // Fix withValues
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: const [
@@ -424,12 +425,14 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                   )
                 else if (isPenaltyActive)
                   GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const PenaltyScreen(),
-                      ),
-                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PenaltyScreen(),
+                        ),
+                      );
+                    },
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
@@ -439,12 +442,12 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                         border: Border.all(color: Colors.redAccent, width: 2),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.redAccent.withOpacity(0.3),
+                            color: Colors.redAccent.withValues(alpha: 0.3),
                             blurRadius: 20,
                             spreadRadius: 2,
                           ),
                         ],
-                      ),
+                      ), // Fix withValues
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: const [
@@ -489,17 +492,17 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                       color: const Color(0xFF15151E),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.redAccent.withOpacity(0.5),
+                        color: Colors.redAccent.withValues(alpha: 0.5),
                         width: 1.5,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.redAccent.withOpacity(0.1),
+                          color: Colors.redAccent.withValues(alpha: 0.1),
                           blurRadius: 15,
                           spreadRadius: 2,
                         ),
                       ],
-                    ),
+                    ), // Fix withValues
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: const [
@@ -535,7 +538,6 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                     ),
                   )
                 else if (completedCountToday < 3)
-                  // 🛡️ STATUS BARU: AMAN TAPI BELUM MAKSIMAL (1 ATAU 2 MISI)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
@@ -543,17 +545,17 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                       color: const Color(0xFF15151E),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.cyanAccent.withOpacity(0.5),
+                        color: Colors.cyanAccent.withValues(alpha: 0.5),
                         width: 1.5,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.cyanAccent.withOpacity(0.1),
+                          color: Colors.cyanAccent.withValues(alpha: 0.1),
                           blurRadius: 15,
                           spreadRadius: 2,
                         ),
                       ],
-                    ),
+                    ), // Fix withValues
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -586,7 +588,6 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // Mini Progress Bar
                         Row(
                           children: [
                             Expanded(
@@ -624,10 +625,10 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                       color: const Color(0xFF15151E),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.greenAccent.withOpacity(0.5),
+                        color: Colors.greenAccent.withValues(alpha: 0.5),
                         width: 1.5,
                       ),
-                    ),
+                    ), // Fix withValues
                     child: const Row(
                       children: [
                         Icon(
@@ -673,7 +674,6 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // 🛡️ Menghitung progres harian menggunakan logika Counter
                       _buildDayNode('M', weeklyLog['1']),
                       _buildDayNode('T', weeklyLog['2']),
                       _buildDayNode('W', weeklyLog['3']),
@@ -695,7 +695,6 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
     );
   }
 
-  // 🛡️ UPDATE FUNGSI NODE: Bisa menerima Boolean (Data Lama) atau Integer (Data Baru)
   Widget _buildDayNode(String day, dynamic logData) {
     bool isCompleted = false;
     int missionCount = 0;
@@ -726,8 +725,8 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: isCompleted
-                ? Colors.blueAccent.withOpacity(0.2)
-                : Colors.transparent,
+                ? Colors.blueAccent.withValues(alpha: 0.2)
+                : Colors.transparent, // Fix withValues
             border: Border.all(
               color: isCompleted ? Colors.blueAccent : Colors.white12,
               width: 2,
@@ -735,11 +734,11 @@ class _HomeDashboardViewState extends State<HomeDashboardView> {
             boxShadow: isCompleted
                 ? [
                     BoxShadow(
-                      color: Colors.blueAccent.withOpacity(0.5),
+                      color: Colors.blueAccent.withValues(alpha: 0.5),
                       blurRadius: 8,
                     ),
                   ]
-                : [],
+                : [], // Fix withValues
           ),
           child: isCompleted
               ? Center(
@@ -787,7 +786,9 @@ class _PenaltyCountdownTimerState extends State<PenaltyCountdownTimer> {
   }
 
   void _startCountdown() {
-    if (!_isRunning) return;
+    if (!_isRunning) {
+      return;
+    }
 
     final now = DateTime.now();
     DateTime targetTime;
@@ -837,17 +838,17 @@ class _PenaltyCountdownTimerState extends State<PenaltyCountdownTimer> {
         border: Border.all(
           color: _isDeadlinePassed
               ? Colors.redAccent
-              : Colors.cyanAccent.withOpacity(0.3),
+              : Colors.cyanAccent.withValues(alpha: 0.3),
           width: 2,
-        ),
+        ), // Fix withValues
         boxShadow: [
           BoxShadow(
             color: _isDeadlinePassed
-                ? Colors.redAccent.withOpacity(0.2)
-                : Colors.cyanAccent.withOpacity(0.05),
+                ? Colors.redAccent.withValues(alpha: 0.2)
+                : Colors.cyanAccent.withValues(alpha: 0.05),
             blurRadius: 15,
           ),
-        ],
+        ], // Fix withValues
       ),
       child: Column(
         children: [
@@ -874,11 +875,11 @@ class _PenaltyCountdownTimerState extends State<PenaltyCountdownTimer> {
               shadows: [
                 Shadow(
                   color: _isDeadlinePassed
-                      ? Colors.redAccent.withOpacity(0.5)
-                      : Colors.cyanAccent.withOpacity(0.5),
+                      ? Colors.redAccent.withValues(alpha: 0.5)
+                      : Colors.cyanAccent.withValues(alpha: 0.5),
                   blurRadius: 15,
                 ),
-              ],
+              ], // Fix withValues
             ),
           ),
         ],
