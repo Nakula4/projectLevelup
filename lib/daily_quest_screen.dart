@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'workout_active_screen.dart'; // Pastikan import ini sesuai dengan nama file Anda
 import 'package:firebase_auth/firebase_auth.dart';
+import 'workout_active_screen.dart'; // Pastikan import ini sesuai dengan nama file Anda
 
 class DailyQuestScreen extends StatelessWidget {
   const DailyQuestScreen({super.key});
 
-  // penentuan rank berdasaarkan level user
+  // Penentuan rank berdasaarkan level user
   String _determinePlayerRank(int level) {
     if (level < 10) return 'E-RANK';
     if (level < 25) return 'D-RANK';
@@ -17,7 +17,17 @@ class DailyQuestScreen extends StatelessWidget {
     return 'S-RANK'; // Level 100 ke atas
   }
 
-  // buat buka link sosmed
+  // 🛡️ PENAMBAHAN FUNGSI: Mengecek apakah hari ini adalah hari pertama pendaftaran
+  bool _isFirstDay(Timestamp? createdAt) {
+    if (createdAt == null) return false;
+    DateTime createdDate = createdAt.toDate();
+    DateTime today = DateTime.now();
+    return createdDate.year == today.year &&
+        createdDate.month == today.month &&
+        createdDate.day == today.day;
+  }
+
+  // Buat buka link sosmed
   Future<void> _launchURL(String urlString) async {
     final Uri url = Uri.parse(urlString);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
@@ -25,7 +35,7 @@ class DailyQuestScreen extends StatelessWidget {
     }
   }
 
-  // widget untuk tutorial tips untuk pemula
+  // Widget untuk tutorial tips untuk pemula
   Widget _buildTipsFeed(BuildContext context) {
     final List<Map<String, String>> tipsData = [
       {
@@ -78,8 +88,9 @@ class DailyQuestScreen extends StatelessWidget {
             itemBuilder: (context, index) {
               final tip = tipsData[index];
               IconData tipIcon = Icons.fitness_center;
-              if (tip['icon'] == 'local_fire_department')
+              if (tip['icon'] == 'local_fire_department') {
                 tipIcon = Icons.local_fire_department;
+              }
               if (tip['icon'] == 'air') tipIcon = Icons.air;
 
               return Container(
@@ -152,7 +163,7 @@ class DailyQuestScreen extends StatelessWidget {
     );
   }
 
-  // ini penalty questnya, belum ditambah lagi atau belum masuk databse
+  // Ini penalty questnya
   Widget _buildPenaltyScreen(BuildContext context, int currentLevel) {
     List<Map<String, dynamic>> penaltyExercises = [
       {'name': 'BURPEES (SURVIVAL)', 'sets': 3, 'target': '15 Reps'},
@@ -315,7 +326,7 @@ class DailyQuestScreen extends StatelessWidget {
     );
   }
 
-  // daftar quest normal
+  // Daftar quest normal
   Widget _buildObjectiveRow(String name, String sets, String target) {
     return Row(
       children: [
@@ -369,7 +380,7 @@ class DailyQuestScreen extends StatelessWidget {
     String rankText = (questData['rank'] ?? 'E-RANK').toString().toUpperCase();
     String rewardAttribute = questData['rewardAttribute'] ?? 'str';
 
-    int baseExpReward = questData['baseExpReward'] ?? 20; // Nilai sudah dinerf
+    int baseExpReward = questData['baseExpReward'] ?? 20;
     int finalExpReward = baseExpReward + ((currentLevel - 1) * 2);
     int finalGoldReward = (finalExpReward / 5).round();
 
@@ -432,7 +443,7 @@ class DailyQuestScreen extends StatelessWidget {
           ),
           const SizedBox(height: 15),
           const Text(
-            'Time Limit: 7',
+            'Time Limit: 7 Hours', // Disesuaikan dengan batas jam 19:00
             style: TextStyle(color: Colors.white54, fontSize: 14),
           ),
           const SizedBox(height: 25),
@@ -561,6 +572,7 @@ class DailyQuestScreen extends StatelessWidget {
                         int multiplier = data['multiplier'] ?? 2;
                         int calculatedTarget =
                             baseReps + ((currentLevel - 1) * multiplier);
+
                         return {
                           'name': data['name'] ?? 'Unknown',
                           'sets': data['sets'] ?? 3,
@@ -605,7 +617,9 @@ class DailyQuestScreen extends StatelessWidget {
     );
   }
 
-  // halaman utamanya
+  // Halaman utamanya
+  // Halaman utamanya
+  // Halaman utamanya
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -636,30 +650,50 @@ class DailyQuestScreen extends StatelessWidget {
             .limit(1)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.blueAccent),
             );
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(
               child: Text(
                 'NO SYSTEM DATA',
                 style: TextStyle(color: Colors.white38),
               ),
             );
+          }
 
           var data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
-          int currentLevel = data['level'] ?? 1;
 
+          int currentLevel = int.tryParse(data['level'].toString()) ?? 1;
+          Timestamp? accountCreated = data['createdAt'] as Timestamp?;
           String currentPlayerRank = _determinePlayerRank(currentLevel);
 
+          // ====================================================================
+          // 🛡️ PERUBAHAN LOGIKA 1: SISTEM PENGHITUNG MISI
+          // ====================================================================
           String todayStr = DateTime.now().weekday.toString();
           Map<String, dynamic> weeklyLog = data['weeklyLog'] ?? {};
-          bool isTaskCompletedToday = weeklyLog[todayStr] == true;
+
+          // Membaca berapa quest yang sudah diselesaikan hari ini
+          int completedCountToday = 0;
+          if (weeklyLog[todayStr] != null) {
+            if (weeklyLog[todayStr] is int) {
+              completedCountToday = weeklyLog[todayStr];
+            } else if (weeklyLog[todayStr] == true) {
+              // Backward compatibility: Jika data lama masih pakai 'true'
+              completedCountToday = 1;
+            }
+          }
+
+          // Hari ini dianggap "Selesai Penuh" JIKA Hunter sudah mengerjakan 3 Misi
+          bool isTaskCompletedToday = completedCountToday >= 3;
 
           bool isPastDeadline = DateTime.now().hour >= 19;
+          bool isGracePeriod = _isFirstDay(accountCreated);
 
-          if (isPastDeadline && !isTaskCompletedToday) {
+          if (isPastDeadline && !isTaskCompletedToday && !isGracePeriod) {
             return _buildPenaltyScreen(context, currentLevel);
           }
 
@@ -668,11 +702,41 @@ class DailyQuestScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (isGracePeriod)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.greenAccent.withOpacity(0.1),
+                      border: Border.all(
+                        color: Colors.greenAccent.withOpacity(0.5),
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.shield, color: Colors.greenAccent),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            "Kelonggaran Hari Pertama. Penalti dinonaktifkan hari ini. Silakan beradaptasi.",
+                            style: TextStyle(
+                              color: Colors.greenAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 _buildTipsFeed(context),
 
-                const Text(
-                  'AVAILABLE QUESTS',
-                  style: TextStyle(
+                // Mengubah judul agar Hunter tahu batas misi harian mereka
+                Text(
+                  'AVAILABLE QUESTS ($completedCountToday/3 DONE)',
+                  style: const TextStyle(
                     color: Colors.blueAccent,
                     fontSize: 14,
                     fontWeight: FontWeight.w900,
@@ -701,7 +765,7 @@ class DailyQuestScreen extends StatelessWidget {
                         ),
                         SizedBox(height: 10),
                         Text(
-                          'DAILY QUEST COMPLETED',
+                          'DAILY LIMIT REACHED',
                           style: TextStyle(
                             color: Colors.blueAccent,
                             fontWeight: FontWeight.bold,
@@ -709,14 +773,13 @@ class DailyQuestScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Istirahatlah untuk hari ini.',
+                          'Batas 3 Misi harian tercapai. Istirahatlah untuk hari ini.',
                           style: TextStyle(color: Colors.white54, fontSize: 12),
                         ),
                       ],
                     ),
                   )
                 else
-                  // quest berdasarkan level/rank
                   StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('quests')
@@ -748,9 +811,47 @@ class DailyQuestScreen extends StatelessWidget {
                         );
                       }
 
-                      // Tampilkan semua quest yang cocok dengan Rank player
+                      int todayDate = DateTime.now().day;
+
+                      // ====================================================================
+                      // 🛡️ PERUBAHAN LOGIKA 2: PEMBATASAN VISUAL (MAX 3)
+                      // ====================================================================
+                      List<QueryDocumentSnapshot> dailyQuests = questSnapshot
+                          .data!
+                          .docs
+                          .where((doc) {
+                            var qData = doc.data() as Map<String, dynamic>;
+                            List<dynamic> assignedDays =
+                                qData['assignedDays'] ?? [];
+
+                            if (assignedDays.isEmpty) return true;
+                            return assignedDays.contains(todayDate);
+                          })
+                          .take(3)
+                          .toList(); // 👈 KUNCI: `.take(3)` memotong daftar agar maksimal 3!
+
+                      if (dailyQuests.isEmpty) {
+                        return Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.white12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'TIDAK ADA JADWAL MISI HARI INI.\nSILAKAN ISTIRAHAT.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white38,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
                       return Column(
-                        children: questSnapshot.data!.docs.map((doc) {
+                        children: dailyQuests.map((doc) {
                           var questData = doc.data() as Map<String, dynamic>;
                           return _buildQuestCard(
                             context,
