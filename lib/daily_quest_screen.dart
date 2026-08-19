@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'workout_active_screen.dart'; // Pastikan import ini sesuai dengan nama file Anda
+import 'workout_active_screen.dart';
+import 'penalty_screen.dart'; // ➔ WAJIB IMPORT INI UNTUK MEMANGGIL ALGOJO
 
 class DailyQuestScreen extends StatelessWidget {
   const DailyQuestScreen({super.key});
@@ -285,14 +286,11 @@ class DailyQuestScreen extends StatelessWidget {
                     height: 50,
                     child: ElevatedButton(
                       onPressed: () {
+                        // ➔ PANGGIL ALGOJO (PENALTY SCREEN) YANG SEBENARNYA
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => WorkoutActiveScreen(
-                              exercises: penaltyExercises,
-                              expReward: 0,
-                              rewardAttribute: 'vit',
-                            ),
+                            builder: (context) => const PenaltyScreen(),
                           ),
                         );
                       },
@@ -307,7 +305,7 @@ class DailyQuestScreen extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        'ACCEPT PENALTY',
+                        'ENTER PENALTY ZONE',
                         style: TextStyle(
                           color: Colors.redAccent.shade100,
                           fontSize: 16,
@@ -373,6 +371,12 @@ class DailyQuestScreen extends StatelessWidget {
     BuildContext context,
     Map<String, dynamic> questData,
     int currentLevel,
+    DocumentReference playerDocRef,
+    int currentExp,
+    int currentGold,
+    Map<String, dynamic> weeklyLog,
+    String todayWeekday,
+    int completedCountToday,
   ) {
     String questTitle = (questData['title'] ?? 'DAILY QUEST')
         .toString()
@@ -443,7 +447,7 @@ class DailyQuestScreen extends StatelessWidget {
           ),
           const SizedBox(height: 15),
           const Text(
-            'Time Limit: 7 Hours', // Disesuaikan dengan batas jam 19:00
+            'Time Limit: 7 Hours',
             style: TextStyle(color: Colors.white54, fontSize: 14),
           ),
           const SizedBox(height: 25),
@@ -562,7 +566,7 @@ class DailyQuestScreen extends StatelessWidget {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (dynamicExercises.isNotEmpty) {
                   List<Map<String, dynamic>> parsedExercises = dynamicExercises
                       .map((exerciseMap) {
@@ -582,7 +586,8 @@ class DailyQuestScreen extends StatelessWidget {
                       })
                       .toList();
 
-                  Navigator.push(
+                  // 1. Jalankan Latihan
+                  final isCompleted = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => WorkoutActiveScreen(
@@ -592,6 +597,41 @@ class DailyQuestScreen extends StatelessWidget {
                       ),
                     ),
                   );
+
+                  // 2. SIMPAN LOGIKA KE FIRESTORE
+                  if (isCompleted == true) {
+                    int newCount = completedCountToday + 1;
+                    weeklyLog[todayWeekday] = newCount;
+
+                    int newExp = currentExp + finalExpReward;
+                    int newGold = currentGold + finalGoldReward;
+                    int nextLevelReq = currentLevel * 100;
+                    int finalLevel = currentLevel;
+
+                    if (newExp >= nextLevelReq) {
+                      finalLevel++;
+                      newExp = newExp - nextLevelReq;
+                    }
+
+                    await playerDocRef.update({
+                      'weeklyLog': weeklyLog,
+                      'currentExp': newExp,
+                      'gold': newGold,
+                      'level': finalLevel,
+                    });
+
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: Colors.blueAccent,
+                          content: Text(
+                            'QUEST CLEAR! ($newCount/3)',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      );
+                    }
+                  }
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -617,9 +657,9 @@ class DailyQuestScreen extends StatelessWidget {
     );
   }
 
-  // Halaman utamanya
-  // Halaman utamanya
-  // Halaman utamanya
+  // ====================================================================
+  // HALAMAN UTAMA (ROOT)
+  // ====================================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -664,36 +704,45 @@ class DailyQuestScreen extends StatelessWidget {
             );
           }
 
-          var data = snapshot.data!.docs.first.data() as Map<String, dynamic>;
+          var playerDoc = snapshot.data!.docs.first;
+          var data = playerDoc.data() as Map<String, dynamic>;
 
           int currentLevel = int.tryParse(data['level'].toString()) ?? 1;
+          int currentExp = data['currentExp'] ?? 0;
+          int currentGold = data['gold'] ?? 0;
           Timestamp? accountCreated = data['createdAt'] as Timestamp?;
           String currentPlayerRank = _determinePlayerRank(currentLevel);
 
           // ====================================================================
-          // 🛡️ PERUBAHAN LOGIKA 1: SISTEM PENGHITUNG MISI
+          // 🛡️ PENAMBAHAN FIX BUG INFINITE PENALTY & SINKRONISASI
           // ====================================================================
+          String lastPenaltyDate = data['lastPenaltyDate'] ?? '';
+          String todayStrDate = DateTime.now().toIso8601String().split('T')[0];
+
           String todayStr = DateTime.now().weekday.toString();
           Map<String, dynamic> weeklyLog = data['weeklyLog'] ?? {};
 
-          // Membaca berapa quest yang sudah diselesaikan hari ini
           int completedCountToday = 0;
           if (weeklyLog[todayStr] != null) {
             if (weeklyLog[todayStr] is int) {
               completedCountToday = weeklyLog[todayStr];
             } else if (weeklyLog[todayStr] == true) {
-              // Backward compatibility: Jika data lama masih pakai 'true'
               completedCountToday = 1;
             }
           }
 
-          // Hari ini dianggap "Selesai Penuh" JIKA Hunter sudah mengerjakan 3 Misi
           bool isTaskCompletedToday = completedCountToday >= 3;
+          bool isSafeFromPenalty = completedCountToday > 0;
+          bool hasServedPenaltyToday = (lastPenaltyDate == todayStrDate);
 
           bool isPastDeadline = DateTime.now().hour >= 19;
           bool isGracePeriod = _isFirstDay(accountCreated);
 
-          if (isPastDeadline && !isTaskCompletedToday && !isGracePeriod) {
+          // ➔ HANYA DIHUKUM JIKA: Lewat batas waktu + belum Quest sama sekali + Belum dihukum hari ini + Bukan pemula
+          if (isPastDeadline &&
+              !isSafeFromPenalty &&
+              !hasServedPenaltyToday &&
+              !isGracePeriod) {
             return _buildPenaltyScreen(context, currentLevel);
           }
 
@@ -733,7 +782,6 @@ class DailyQuestScreen extends StatelessWidget {
 
                 _buildTipsFeed(context),
 
-                // Mengubah judul agar Hunter tahu batas misi harian mereka
                 Text(
                   'AVAILABLE QUESTS ($completedCountToday/3 DONE)',
                   style: const TextStyle(
@@ -813,9 +861,6 @@ class DailyQuestScreen extends StatelessWidget {
 
                       int todayDate = DateTime.now().day;
 
-                      // ====================================================================
-                      // 🛡️ PERUBAHAN LOGIKA 2: PEMBATASAN VISUAL (MAX 3)
-                      // ====================================================================
                       List<QueryDocumentSnapshot> dailyQuests = questSnapshot
                           .data!
                           .docs
@@ -828,7 +873,7 @@ class DailyQuestScreen extends StatelessWidget {
                             return assignedDays.contains(todayDate);
                           })
                           .take(3)
-                          .toList(); // 👈 KUNCI: `.take(3)` memotong daftar agar maksimal 3!
+                          .toList();
 
                       if (dailyQuests.isEmpty) {
                         return Container(
@@ -857,6 +902,13 @@ class DailyQuestScreen extends StatelessWidget {
                             context,
                             questData,
                             currentLevel,
+                            playerDoc
+                                .reference, // Mengirim Referensi Player Doc
+                            currentExp,
+                            currentGold,
+                            weeklyLog,
+                            todayStr,
+                            completedCountToday,
                           );
                         }).toList(),
                       );
