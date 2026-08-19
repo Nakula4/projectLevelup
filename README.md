@@ -9,6 +9,7 @@ yang dimana, project ini masih dalam tahap pengembangan.
 *   **Status & Leveling:** Pantau peningkatan kekuatan, stamina, dan kelincahan Anda secara visual melalui grafik statistik *real-time*.
 *   **Shadow Monarch Aesthetic:** Antarmuka pengguna (UI) gelap dengan aksen neon biru yang elegan dan memberikan kesan misterius nan kuat.
 *   **Workout History:** Rekam jejak latihan Anda menggunakan integrasi basis data yang cepat dan aman.
+*   **Penalty System:** Penerapan penalti jika user tidak melakukan quests tiap harinya.
 
 ## 🛠️ Teknologi yang Digunakan (Tech Stack)
 
